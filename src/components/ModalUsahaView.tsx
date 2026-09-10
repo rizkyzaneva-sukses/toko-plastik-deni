@@ -34,8 +34,6 @@ export const ModalUsahaView: React.FC = () => {
     deleteTransaksiModal,
     totalModalTerkumpul,
     totalPriveDitarik,
-    saldoKasBesar,
-    saldoBank,
     saldoLaciKasir,
     isUserAssigned,
   } = useApp();
@@ -72,13 +70,13 @@ export const ModalUsahaView: React.FC = () => {
   // Add Capital Form State
   const [sumberModal, setSumberModal] = useState<SumberModal>(SumberModal.UANG_SENDIRI);
   const [nominalModal, setNominalModal] = useState<number | ''>('');
-  const [kasTujuan, setKasTujuan] = useState<SumberDana>(SumberDana.BANK);
+  const [kasTujuan, setKasTujuan] = useState<SumberDana>(SumberDana.LACI_KASIR);
   const [penyetorModal, setPenyetorModal] = useState<string>('');
   const [keteranganModal, setKeteranganModal] = useState<string>('');
 
   // Prive Form State
   const [nominalPrive, setNominalPrive] = useState<number | ''>('');
-  const [kasAsalPrive, setKasAsalPrive] = useState<SumberDana>(SumberDana.KAS_BESAR);
+  const [kasAsalPrive, setKasAsalPrive] = useState<SumberDana>(SumberDana.LACI_KASIR);
   const [penarikPrive, setPenarikPrive] = useState<string>(currentUser.nama || 'Owner');
   const [keteranganPrive, setKeteranganPrive] = useState<string>('');
 
@@ -376,63 +374,28 @@ export const ModalUsahaView: React.FC = () => {
           </div>
         </div>
 
-        {/* Card 2: Likuiditas Kas Toko Saat Ini */}
+        {/* Card 2: Kas Laci */}
         <div className="bg-white dark:bg-stone-900 rounded-2xl p-4 sm:p-5 border border-stone-200 dark:border-stone-800 shadow-xs flex flex-col justify-between">
           <div>
             <h3 className="text-sm font-black text-stone-900 dark:text-stone-100 mb-1">
-              Posisi Saldo Kas & Rekening
+              Kas Laci Toko
             </h3>
             <p className="text-xs text-stone-500 dark:text-stone-400 mb-4">
-              Uang riil yang tersedia untuk operasional dan penarikan prive
+              Satu-satunya kas operasional. Uang tetap tersimpan setelah shift ditutup.
             </p>
 
-            <div className="space-y-3 text-xs">
-              <div className="flex items-center justify-between p-3 rounded-xl bg-stone-50 dark:bg-stone-800/60 border border-stone-100 dark:border-stone-800">
-                <div className="flex items-center gap-2">
-                  <Building2 className="w-4 h-4 text-emerald-600" />
-                  <div>
-                    <div className="font-bold text-stone-800 dark:text-stone-200">Rekening Bank</div>
-                    <div className="text-[10px] text-stone-400">BCA / Mandiri Usaha</div>
-                  </div>
-                </div>
-                <div className="font-black text-stone-900 dark:text-stone-100 text-sm">
-                  {formatRupiah(saldoBank)}
+            <div className="flex items-center justify-between p-4 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 text-xs">
+              <div className="flex items-center gap-2">
+                <Coins className="w-5 h-5 text-amber-600" />
+                <div>
+                  <div className="font-bold text-stone-800 dark:text-stone-200">Saldo Laci</div>
+                  <div className="text-[10px] text-stone-500 dark:text-stone-400">Tunai di laci kasir</div>
                 </div>
               </div>
-
-              <div className="flex items-center justify-between p-3 rounded-xl bg-stone-50 dark:bg-stone-800/60 border border-stone-100 dark:border-stone-800">
-                <div className="flex items-center gap-2">
-                  <Wallet className="w-4 h-4 text-blue-600" />
-                  <div>
-                    <div className="font-bold text-stone-800 dark:text-stone-200">Kas Besar (Brankas)</div>
-                    <div className="text-[10px] text-stone-400">Uang tunai kantor pusat</div>
-                  </div>
-                </div>
-                <div className="font-black text-stone-900 dark:text-stone-100 text-sm">
-                  {formatRupiah(saldoKasBesar)}
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between p-3 rounded-xl bg-stone-50 dark:bg-stone-800/60 border border-stone-100 dark:border-stone-800">
-                <div className="flex items-center gap-2">
-                  <Coins className="w-4 h-4 text-amber-600" />
-                  <div>
-                    <div className="font-bold text-stone-800 dark:text-stone-200">Laci Kasir Aktif</div>
-                    <div className="text-[10px] text-stone-400">Uang shift operasional</div>
-                  </div>
-                </div>
-                <div className="font-black text-stone-900 dark:text-stone-100 text-sm">
-                  {formatRupiah(saldoLaciKasir)}
-                </div>
+              <div className="font-black text-stone-900 dark:text-stone-100 text-lg">
+                {formatRupiah(saldoLaciKasir)}
               </div>
             </div>
-          </div>
-
-          <div className="pt-3 border-t border-stone-100 dark:border-stone-800 flex items-center justify-between text-xs">
-            <span className="font-bold text-stone-600 dark:text-stone-400">Total Likuiditas Tersedia</span>
-            <span className="font-black text-stone-900 dark:text-stone-100 text-base">
-              {formatRupiah(saldoBank + saldoKasBesar + saldoLaciKasir)}
-            </span>
           </div>
         </div>
       </div>
@@ -771,20 +734,13 @@ export const ModalUsahaView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Kas Tujuan Setoran */}
               <div>
                 <label className="block font-bold text-stone-700 dark:text-stone-300 mb-1">
-                  Disetorkan Ke Rekening / Kas
+                  Disetorkan Ke
                 </label>
-                <select
-                  value={kasTujuan}
-                  onChange={(e) => setKasTujuan(e.target.value as SumberDana)}
-                  className="w-full px-3 py-2 rounded-xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100 font-semibold"
-                >
-                  <option value={SumberDana.BANK}>Rekening Bank (BCA/Mandiri)</option>
-                  <option value={SumberDana.KAS_BESAR}>Kas Besar / Brankas Kantor</option>
-                  <option value={SumberDana.LACI_KASIR}>Laci Kasir Toko (Shift Aktif)</option>
-                </select>
+                <div className="w-full px-3 py-2 rounded-xl border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30 text-stone-900 dark:text-stone-100 font-semibold">
+                  Laci Kasir Toko
+                </div>
               </div>
 
               {/* Nama Penyetor */}
@@ -900,20 +856,13 @@ export const ModalUsahaView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Kas Asal Penarikan */}
               <div>
                 <label className="block font-bold text-stone-700 dark:text-stone-300 mb-1">
-                  Diambil Dari Kas
+                  Diambil Dari
                 </label>
-                <select
-                  value={kasAsalPrive}
-                  onChange={(e) => setKasAsalPrive(e.target.value as SumberDana)}
-                  className="w-full px-3 py-2 rounded-xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100 font-semibold"
-                >
-                  <option value={SumberDana.KAS_BESAR}>Kas Besar / Brankas Toko</option>
-                  <option value={SumberDana.BANK}>Rekening Bank Usaha (Transfer)</option>
-                  <option value={SumberDana.LACI_KASIR}>Laci Kasir (Shift Aktif)</option>
-                </select>
+                <div className="w-full px-3 py-2 rounded-xl border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30 text-stone-900 dark:text-stone-100 font-semibold">
+                  Laci Kasir Toko
+                </div>
               </div>
 
               {/* Nama Pemilik */}

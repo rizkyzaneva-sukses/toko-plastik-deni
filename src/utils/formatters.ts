@@ -73,6 +73,27 @@ export function terbilangRupiah(amount: number | null | undefined): string {
 }
 
 /**
+ * Today's date as YYYY-MM-DD in Asia/Jakarta (not UTC).
+ */
+export function todayWIBDate(from?: Date): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jakarta',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(from || new Date());
+}
+
+/**
+ * Add calendar days then return YYYY-MM-DD in Asia/Jakarta.
+ */
+export function addDaysWIB(days: number, from?: Date): string {
+  const d = from ? new Date(from.getTime()) : new Date();
+  d.setDate(d.getDate() + days);
+  return todayWIBDate(d);
+}
+
+/**
  * Format date in WIB (Asia/Jakarta)
  * e.g. 20 Agu 2026
  */

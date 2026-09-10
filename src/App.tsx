@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { AppProvider } from './context/AppContext';
+import React, { useState, useEffect } from 'react';
+import { AppProvider, useApp } from './context/AppContext';
 import { Layout } from './components/Layout';
+import { canAccessTab } from './utils/access';
 import { DashboardView } from './components/DashboardView';
 import { CashierView } from './components/CashierView';
 import { TransactionsDataView } from './components/TransactionsDataView';
@@ -13,11 +14,19 @@ import { FinancialReportsView } from './components/FinancialReportsView';
 import { MasterDataView } from './components/MasterDataView';
 
 export function AppContent() {
+  const { currentUser } = useApp();
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [stockInitialTab, setStockInitialTab] = useState<'daftar' | 'mutasi' | 'opname' | 'ledger' | 'masuk'>('daftar');
   const [stockInitialSupplierId, setStockInitialSupplierId] = useState<string | undefined>(undefined);
 
+  useEffect(() => {
+    if (!canAccessTab(currentUser.role, activeTab)) {
+      setActiveTab('dashboard');
+    }
+  }, [currentUser.role, activeTab]);
+
   const handleNavigateToBeliSupplier = (supplierId?: string) => {
+    if (!canAccessTab(currentUser.role, 'stok')) return;
     setStockInitialTab('masuk');
     setStockInitialSupplierId(supplierId);
     setActiveTab('stok');
@@ -27,8 +36,8 @@ export function AppContent() {
     <Layout
       activeTab={activeTab}
       setActiveTab={(tab) => {
+        if (!canAccessTab(currentUser.role, tab)) return;
         if (tab === 'stok' && activeTab !== 'stok') {
-          // Reset default tab to daftar if clicking general stok
           setStockInitialTab('daftar');
           setStockInitialSupplierId(undefined);
         }

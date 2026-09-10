@@ -33,6 +33,7 @@ import {
 import { useApp } from '../context/AppContext';
 import { MetodeBayar, Role, ShiftKasir, Transaksi } from '../types';
 import { formatRupiah, formatWIBDate, formatWIBDateTime, formatNumber } from '../utils/formatters';
+import { SearchableSelect } from './SearchableSelect';
 
 interface FinancialReportsViewProps {
   onNavigateToPengeluaran?: () => void;
@@ -273,18 +274,18 @@ export const FinancialReportsView: React.FC<FinancialReportsViewProps> = ({
 
           {/* Outlet Selector (Owner can pick all / any outlet; Non-owner is locked) */}
           {currentUser.role === Role.OWNER ? (
-            <select
-              value={selectedOutlet}
-              onChange={(e) => setSelectedOutlet(e.target.value)}
-              className="px-3 py-2 rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 text-xs font-bold"
-            >
-              <option value="all">Semua Outlet</option>
-              {outlets.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.nama}
-                </option>
-              ))}
-            </select>
+            <div className="min-w-[220px]">
+              <SearchableSelect
+                id="laporan-outlet"
+                options={[
+                  { value: 'all', label: 'Semua Outlet' },
+                  ...outlets.map((o) => ({ value: o.id, label: o.nama })),
+                ]}
+                value={selectedOutlet}
+                onChange={setSelectedOutlet}
+                placeholder="Outlet"
+              />
+            </div>
           ) : (
             <div className="px-3 py-2 rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-xs font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
               <Lock className="w-3.5 h-3.5 text-amber-600" />

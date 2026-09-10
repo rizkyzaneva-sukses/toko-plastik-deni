@@ -37,7 +37,7 @@ import {
 } from 'recharts';
 import { useApp } from '../context/AppContext';
 import { Role, MetodeBayar, SumberDana, TipeTransaksiModal } from '../types';
-import { formatRupiah, formatNumber, formatWIBDate, formatWIBDateTime } from '../utils/formatters';
+import { formatRupiah, formatNumber, formatWIBDate, formatWIBDateTime, todayWIBDate } from '../utils/formatters';
 
 interface DashboardViewProps {
   onNavigate: (tab: string) => void;
@@ -60,11 +60,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
     transaksiModalList,
     totalModalTerkumpul,
     totalPriveDitarik,
-    saldoKasBesar,
-    saldoBank,
     saldoLaciKasir,
     activeShift,
     isUserAssigned,
+    hasStokRecordForOutlet,
   } = useApp();
 
   // If user is Kasir/Manager and NOT assigned to any outlet, block view
@@ -99,7 +98,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
   }, [transaksiList, currentUser, activeOutlet]);
 
   // Today filter
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = todayWIBDate();
   const todayTransactions = useMemo(() => {
     return outletTransactions.filter((t) => !t.voided && t.createdAt.startsWith(todayStr));
   }, [outletTransactions, todayStr]);
@@ -158,6 +157,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
     return produk
       .filter((p) => {
         if (!p.aktif) return false;
+        if (!hasStokRecordForOutlet(p.id, activeOutlet.id)) return false;
         const currentStock = getProdukStokForOutlet(p.id, activeOutlet.id);
         const minStock = p.stokMin ?? 5;
         return currentStock <= minStock;
@@ -167,7 +167,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
         currentStock: getProdukStokForOutlet(p.id, activeOutlet.id),
       }))
       .slice(0, 5);
-  }, [produk, activeOutlet, getProdukStokForOutlet]);
+  }, [produk, activeOutlet, getProdukStokForOutlet, hasStokRecordForOutlet]);
 
   // Outstanding Piutang Pelanggan
   const overduePiutang = useMemo(() => {
@@ -204,7 +204,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
     for (let i = 6; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
-      const dateKey = d.toISOString().split('T')[0];
+      const dateKey = todayWIBDate(d);
       const dayName = d.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' });
 
       let dayOmzet = 0;
@@ -254,9 +254,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
       if (t.voided) continue;
       for (const item of t.items) {
         if (!salesMap[item.produkId]) {
+          const prodRef = produk.find((x) => x.id === item.produkId);
           salesMap[item.produkId] = {
             nama: item.namaProduk,
-            satuan: item.satuan,
+            satuan: prodRef?.satuan || '',
             qty: 0,
             omzet: 0,
           };
@@ -268,7 +269,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
     return Object.values(salesMap)
       .sort((a, b) => b.qty - a.qty)
       .slice(0, 5);
-  }, [outletTransactions]);
+  }, [outletTransactions, produk]);
 
   return (
     <div className="max-w-7xl mx-auto p-3 sm:p-6 space-y-6">
@@ -400,22 +401,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
           </div>
         </div>
 
-        {/* Card 4: Saldo Kas & Bank */}
+        {/* Card 4: Kas Laci */}
         <div className="bg-white dark:bg-stone-900 rounded-2xl p-4 sm:p-5 border border-stone-200 dark:border-stone-800 shadow-xs relative overflow-hidden">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold text-stone-500 dark:text-stone-400">Total Likuiditas Kas & Bank</span>
+            <span className="text-xs font-bold text-stone-500 dark:text-stone-400">Kas Laci</span>
             <div className="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center">
               <PiggyBank className="w-4 h-4" />
             </div>
           </div>
           <div className="text-xl sm:text-2xl font-black text-stone-900 dark:text-stone-100">
-            {formatRupiah(saldoKasBesar + saldoBank + saldoLaciKasir)}
+            {formatRupiah(saldoLaciKasir)}
           </div>
           <div className="flex items-center justify-between text-xs text-stone-500 dark:text-stone-400 mt-2 pt-2 border-t border-stone-100 dark:border-stone-800">
-            <span>Bank: {formatRupiah(saldoBank)}</span>
-            <span className="font-semibold text-stone-600 dark:text-stone-300">
-              Laci: {formatRupiah(saldoLaciKasir)}
-            </span>
+            <span>{activeShift ? 'Shift sedang buka' : 'Saldo setelah shift terakhir'}</span>
+            <span className="font-semibold text-stone-600 dark:text-stone-300">Tunai di laci</span>
           </div>
         </div>
       </div>

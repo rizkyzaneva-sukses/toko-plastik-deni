@@ -30,8 +30,10 @@ import {
 import { useApp } from '../context/AppContext';
 import { Role } from '../types';
 import { formatRupiah } from '../utils/formatters';
+import { canAccessTab } from '../utils/access';
 import { ShiftModal } from './ShiftModal';
 import { UserGuideModal } from './UserGuideModal';
+import { SearchableSelect } from './SearchableSelect';
 
 interface LayoutProps {
   activeTab: string;
@@ -57,6 +59,7 @@ export const Layout: React.FC<LayoutProps> = ({
     isUserAssigned,
     produk,
     getProdukStokForOutlet,
+    hasStokRecordForOutlet,
   } = useApp();
 
   const [isShiftModalOpen, setIsShiftModalOpen] = useState(false);
@@ -69,11 +72,12 @@ export const Layout: React.FC<LayoutProps> = ({
   const lowStockCount = useMemo(() => {
     return produk.filter((p) => {
       if (!p.aktif) return false;
+      if (!hasStokRecordForOutlet(p.id, activeOutlet.id)) return false;
       const stok = getProdukStokForOutlet(p.id, activeOutlet.id);
       const minLimit = p.stokMin ?? 5;
       return stok <= minLimit;
     }).length;
-  }, [produk, activeOutlet.id, getProdukStokForOutlet]);
+  }, [produk, activeOutlet.id, getProdukStokForOutlet, hasStokRecordForOutlet]);
 
   const toggleDarkMode = () => {
     setIsDarkMode(!isDarkMode);
@@ -93,7 +97,11 @@ export const Layout: React.FC<LayoutProps> = ({
     setIsShiftModalOpen(true);
   };
 
-  // Desktop Navigation Items
+  const goTab = (tab: string) => {
+    if (!canAccessTab(currentUser.role, tab)) return;
+    setActiveTab(tab);
+  };
+
   const desktopNavItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'kasir', label: 'Kasir', icon: ShoppingCart },
@@ -112,91 +120,71 @@ export const Layout: React.FC<LayoutProps> = ({
     },
     { id: 'laporan', label: 'Laporan Keuangan', icon: TrendingUp, shortLabel: 'Laporan' },
     { id: 'master', label: 'Data Master', icon: FolderKanban, shortLabel: 'Master' },
-  ];
+  ].filter((item) => canAccessTab(currentUser.role, item.id));
 
-  // Mobile Bottom Navigation: 5 Quick Action Tabs
-  const mobileNavItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'kasir', label: 'Kasir', icon: ShoppingCart },
-    { id: 'transaksi', label: 'Transaksi', icon: ReceiptText },
-    { id: 'pengeluaran', label: 'Pengeluaran', icon: Receipt },
-  ];
+  const mobilePriority = ['dashboard', 'kasir', 'transaksi', 'pengeluaran', 'pecah', 'stok', 'piutang'];
+  const mobileNavItems = mobilePriority
+    .map((id) => desktopNavItems.find((item) => item.id === id))
+    .filter((item): item is (typeof desktopNavItems)[number] => !!item)
+    .slice(0, 4);
 
   const isSecondaryActive = ['modal', 'pecah', 'piutang', 'stok', 'laporan', 'master'].includes(activeTab);
 
   return (
-    <div className="min-h-screen bg-stone-100 dark:bg-stone-950 text-stone-900 dark:text-stone-100 flex flex-col font-sans pb-18 sm:pb-0">
+    <div className="min-h-screen bg-stone-100 dark:bg-stone-950 text-stone-900 dark:text-stone-100 flex flex-col font-sans pb-20 xl:pb-0">
       {/* TOP APP HEADER */}
       <header className="sticky top-0 z-40 bg-white/95 dark:bg-stone-900/95 backdrop-blur-md border-b border-stone-200 dark:border-stone-800 shadow-2xs">
-        <div className="max-w-7xl mx-auto px-2.5 sm:px-4 h-14 flex items-center justify-between gap-2">
-          {/* Brand Logo & Title */}
-          <div className="flex items-center gap-2.5 min-w-0">
-            <button
-              type="button"
-              onClick={() => setActiveTab('dashboard')}
-              className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center font-black shadow-sm shrink-0 cursor-pointer hover:bg-amber-600 transition-colors"
-            >
-              <Store className="w-5 h-5" />
-            </button>
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5">
-                <span className="font-black text-xs sm:text-sm md:text-base tracking-tight text-stone-900 dark:text-stone-100 truncate">
-                  Toko Plastik & Bahan Kue
-                </span>
-                <span className="hidden sm:inline-block text-[10px] px-1.5 py-0.2 rounded-full font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
-                  POS
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] text-stone-500 dark:text-stone-400 truncate">
-                <span>Multi-Outlet</span>
-                <span>·</span>
-                <span>Pecah Karung</span>
-                <span>·</span>
-                <span>Modal & Prive</span>
+        <div className="max-w-7xl mx-auto px-2.5 sm:px-4 py-2 xl:py-0 xl:h-14 flex flex-col xl:flex-row xl:items-center xl:justify-between gap-2">
+          {/* Row 1 (mobile) / left (desktop): Brand + Shift */}
+          <div className="flex items-center justify-between gap-2 min-w-0">
+            <div className="flex items-center gap-2 min-w-0">
+              <button
+                type="button"
+                onClick={() => setActiveTab('dashboard')}
+                className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center font-black shadow-sm shrink-0 cursor-pointer hover:bg-amber-600 transition-colors"
+              >
+                <Store className="w-5 h-5" />
+              </button>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-black text-sm md:text-base tracking-tight text-stone-900 dark:text-stone-100 truncate max-w-[160px] sm:max-w-[240px] md:max-w-none">
+                    Toko Plastik & Bahan Kue
+                  </span>
+                  <span className="hidden sm:inline-block text-[10px] px-1.5 py-0.2 rounded-full font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                    POS
+                  </span>
+                </div>
+                <div className="hidden sm:flex items-center gap-1.5 text-[10px] sm:text-[11px] text-stone-500 dark:text-stone-400 truncate">
+                  <span>Multi-Outlet</span>
+                  <span>·</span>
+                  <span>Pecah Karung</span>
+                  <span>·</span>
+                  <span>Modal & Prive</span>
+                </div>
               </div>
             </div>
+
+            <button
+              type="button"
+              onClick={handleShiftClick}
+              className={`xl:hidden min-h-[36px] px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1.5 border transition-all cursor-pointer shrink-0 ${
+                activeShift
+                  ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 text-emerald-700 dark:text-emerald-300'
+                  : 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 text-rose-700 dark:text-rose-300 animate-pulse'
+              }`}
+              title={activeShift ? 'Klik untuk tutup shift kasir' : 'Klik untuk buka shift baru'}
+            >
+              {activeShift ? <Unlock className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
+              <span>{activeShift ? 'Shift ON' : 'Buka Shift'}</span>
+            </button>
           </div>
 
-          {/* Desktop Navigation Links */}
-          <nav className="hidden 2xl:flex items-center gap-1">
-            {desktopNavItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = activeTab === item.id;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => setActiveTab(item.id)}
-                  className={`px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer relative ${
-                    isActive
-                      ? 'bg-amber-500 text-white shadow-2xs'
-                      : 'text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800'
-                  }`}
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  <span>{item.label}</span>
-                  {item.badge && (
-                    <span
-                      className={`text-[9.5px] px-1.5 py-0.2 rounded-full font-black leading-none ${
-                        item.isWarning
-                          ? 'bg-rose-600 text-white animate-pulse shadow-2xs'
-                          : 'bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200'
-                      }`}
-                    >
-                      {item.badge}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </nav>
-
-          {/* Right Controls: Outlet Switcher, Shift Status, User Switcher */}
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            {/* Guide Button */}
+          {/* Row 2 (mobile) / right (desktop): Outlet, User, Theme */}
+          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 overflow-x-auto scrollbar-none">
             <button
               type="button"
               onClick={() => setIsUserGuideOpen(true)}
-              className="px-2 sm:px-2.5 py-1.5 rounded-xl border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-800 hover:bg-stone-100 dark:hover:bg-stone-700 text-stone-700 dark:text-stone-300 text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs transition-all"
+              className="hidden sm:flex px-2 sm:px-2.5 py-1.5 min-h-[36px] rounded-xl border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-800 hover:bg-stone-100 dark:hover:bg-stone-700 text-stone-700 dark:text-stone-300 text-xs font-bold items-center gap-1.5 cursor-pointer shadow-2xs transition-all shrink-0"
               title="Buka Buku Panduan Penggunaan Aplikasi"
             >
               <BookOpen className="w-3.5 h-3.5 text-amber-600" />
@@ -205,20 +193,17 @@ export const Layout: React.FC<LayoutProps> = ({
 
             {/* Active Outlet Selector / Lock Badge */}
             {currentUser.role === Role.OWNER ? (
-              <div className="relative">
-                <select
-                  aria-label="Pilih Outlet Aktif"
+              <div className="min-w-[140px] max-w-[180px] sm:max-w-[220px]">
+                <SearchableSelect
+                  id="header-outlet"
+                  options={outlets.map((o) => ({
+                    value: o.id,
+                    label: o.nama.replace('Toko Plastik ', ''),
+                  }))}
                   value={activeOutlet.id}
-                  onChange={(e) => setActiveOutletId(e.target.value)}
-                  className="pl-2 sm:pl-2.5 pr-6 sm:pr-7 py-1.5 rounded-xl border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-800 text-[11px] sm:text-xs font-bold text-stone-800 dark:text-stone-200 cursor-pointer appearance-none max-w-[130px] sm:max-w-[170px] truncate"
-                >
-                  {outlets.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      📍 {o.nama.replace('Toko Plastik ', '')}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="w-3.5 h-3.5 text-stone-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  onChange={setActiveOutletId}
+                  placeholder="Pilih outlet"
+                />
               </div>
             ) : (
               <div
@@ -236,7 +221,7 @@ export const Layout: React.FC<LayoutProps> = ({
             <button
               type="button"
               onClick={handleShiftClick}
-              className={`min-h-[32px] px-2 sm:px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1 sm:gap-1.5 border transition-all cursor-pointer ${
+              className={`hidden xl:flex min-h-[36px] px-2.5 py-1 rounded-xl text-xs font-bold items-center gap-1.5 border transition-all cursor-pointer shrink-0 ${
                 activeShift
                   ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 text-emerald-700 dark:text-emerald-300'
                   : 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 text-rose-700 dark:text-rose-300 animate-pulse'
@@ -244,38 +229,37 @@ export const Layout: React.FC<LayoutProps> = ({
               title={activeShift ? 'Klik untuk tutup shift kasir' : 'Klik untuk buka shift baru'}
             >
               {activeShift ? <Unlock className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
-              <span className="hidden sm:inline">
-                {activeShift ? `Shift: ${formatRupiah(activeShift.tunaiSistem)}` : 'Buka Shift'}
-              </span>
-              <span className="sm:hidden">{activeShift ? 'Shift ON' : 'Shift OFF'}</span>
+              <span>{activeShift ? `Shift: ${formatRupiah(activeShift.tunaiSistem)}` : 'Buka Shift'}</span>
             </button>
 
             {/* User Account / Role Switcher */}
-            <div className="relative">
-              <select
-                aria-label="Pilih Akun Pengguna"
-                value={currentUser.id}
-                onChange={(e) => switchUser(e.target.value)}
-                className="pl-2 sm:pl-2.5 pr-6 sm:pr-7 py-1.5 rounded-xl border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-800 text-[11px] sm:text-xs font-bold text-stone-700 dark:text-stone-300 cursor-pointer appearance-none max-w-[120px] sm:max-w-[160px] truncate"
-                title="Ganti akun pengguna untuk uji coba hak akses (Owner, Manager, Kasir Cabang, atau Kasir Belum Ditugaskan)"
-              >
-                {users.map((u) => {
+            <div className="min-w-[140px] max-w-[200px] sm:max-w-[240px]">
+              <SearchableSelect
+                id="header-user"
+                options={users.map((u) => {
                   const assignedOutlet = outlets.find((o) => o.id === u.outletId);
-                  const outletLabel = u.role === Role.OWNER ? 'Global' : assignedOutlet ? assignedOutlet.nama.replace('Toko Plastik ', '') : 'Unassigned';
-                  return (
-                    <option key={u.id} value={u.id}>
-                      👤 {u.nama.split(' ')[0]} ({u.role} - {outletLabel})
-                    </option>
-                  );
+                  const outletLabel =
+                    u.role === Role.OWNER
+                      ? 'Global'
+                      : assignedOutlet
+                      ? assignedOutlet.nama.replace('Toko Plastik ', '')
+                      : 'Unassigned';
+                  return {
+                    value: u.id,
+                    label: `${u.nama.split(' ')[0]} (${u.role})`,
+                    subtitle: outletLabel,
+                  };
                 })}
-              </select>
-              <ChevronDown className="w-3.5 h-3.5 text-stone-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                value={currentUser.id}
+                onChange={switchUser}
+                placeholder="Pilih akun"
+              />
             </div>
 
             {/* Dark Mode Toggle */}
             <button
               onClick={toggleDarkMode}
-              className="p-1.5 rounded-xl text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-800 cursor-pointer"
+              className="min-h-[44px] min-w-[44px] p-2 rounded-xl text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-800 cursor-pointer flex items-center justify-center shrink-0"
               title="Toggle Dark Mode"
             >
               {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
@@ -283,15 +267,15 @@ export const Layout: React.FC<LayoutProps> = ({
           </div>
         </div>
 
-        {/* Secondary Sub-Navbar for Desktop screens under 2XL (Ensures all 10 tabs are directly clickable) */}
-        <div className="hidden xl:flex 2xl:hidden border-t border-stone-200 dark:border-stone-800 bg-stone-50/80 dark:bg-stone-900/80 px-4 py-1.5 gap-1 overflow-x-auto">
+        {/* Desktop tab bar — always a second row from xl up so 10 tabs never crush the brand */}
+        <div className="hidden xl:flex border-t border-stone-200 dark:border-stone-800 bg-stone-50/80 dark:bg-stone-900/80 px-4 py-1.5 gap-1 overflow-x-auto">
           {desktopNavItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
             return (
               <button
                 key={item.id}
-                onClick={() => setActiveTab(item.id)}
+                onClick={() => goTab(item.id)}
                 className={`px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${
                   isActive
                     ? 'bg-amber-500 text-white shadow-2xs'
@@ -330,7 +314,7 @@ export const Layout: React.FC<LayoutProps> = ({
               <button
                 key={item.id}
                 onClick={() => {
-                  setActiveTab(item.id);
+                  goTab(item.id);
                   setIsMoreMenuOpen(false);
                 }}
                 className={`min-h-[50px] py-1 px-0.5 rounded-xl flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer relative ${
@@ -413,11 +397,11 @@ export const Layout: React.FC<LayoutProps> = ({
 
             {/* List of Actions in "More" Menu */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {/* Modal Usaha & Prive */}
+              {canAccessTab(currentUser.role, 'modal') && (
               <button
                 type="button"
                 onClick={() => {
-                  setActiveTab('modal');
+                  goTab('modal');
                   setIsMoreMenuOpen(false);
                 }}
                 className={`p-3 rounded-2xl border text-left flex items-center justify-between transition-all cursor-pointer ${
@@ -441,12 +425,13 @@ export const Layout: React.FC<LayoutProps> = ({
                 </div>
                 <ChevronRight className="w-4 h-4 text-stone-400 shrink-0" />
               </button>
+              )}
 
-              {/* Pecah Karung */}
+              {canAccessTab(currentUser.role, 'pecah') && (
               <button
                 type="button"
                 onClick={() => {
-                  setActiveTab('pecah');
+                  goTab('pecah');
                   setIsMoreMenuOpen(false);
                 }}
                 className={`p-3 rounded-2xl border text-left flex items-center justify-between transition-all cursor-pointer ${
@@ -470,12 +455,13 @@ export const Layout: React.FC<LayoutProps> = ({
                 </div>
                 <ChevronRight className="w-4 h-4 text-stone-400 shrink-0" />
               </button>
+              )}
 
-              {/* Stok & Cabang */}
+              {canAccessTab(currentUser.role, 'stok') && (
               <button
                 type="button"
                 onClick={() => {
-                  setActiveTab('stok');
+                  goTab('stok');
                   setIsMoreMenuOpen(false);
                 }}
                 className={`p-3 rounded-2xl border text-left flex items-center justify-between transition-all cursor-pointer ${
@@ -499,12 +485,13 @@ export const Layout: React.FC<LayoutProps> = ({
                 </div>
                 <ChevronRight className="w-4 h-4 text-stone-400 shrink-0" />
               </button>
+              )}
 
-              {/* Hutang-Piutang */}
+              {canAccessTab(currentUser.role, 'piutang') && (
               <button
                 type="button"
                 onClick={() => {
-                  setActiveTab('piutang');
+                  goTab('piutang');
                   setIsMoreMenuOpen(false);
                 }}
                 className={`p-3 rounded-2xl border text-left flex items-center justify-between transition-all cursor-pointer ${
@@ -528,12 +515,13 @@ export const Layout: React.FC<LayoutProps> = ({
                 </div>
                 <ChevronRight className="w-4 h-4 text-stone-400 shrink-0" />
               </button>
+              )}
 
-              {/* Laporan Keuangan Pure */}
+              {canAccessTab(currentUser.role, 'laporan') && (
               <button
                 type="button"
                 onClick={() => {
-                  setActiveTab('laporan');
+                  goTab('laporan');
                   setIsMoreMenuOpen(false);
                 }}
                 className={`p-3 rounded-2xl border text-left flex items-center justify-between transition-all cursor-pointer ${
@@ -557,12 +545,13 @@ export const Layout: React.FC<LayoutProps> = ({
                 </div>
                 <ChevronRight className="w-4 h-4 text-stone-400 shrink-0" />
               </button>
+              )}
 
-              {/* Data Master & Import CSV */}
+              {canAccessTab(currentUser.role, 'master') && (
               <button
                 type="button"
                 onClick={() => {
-                  setActiveTab('master');
+                  goTab('master');
                   setIsMoreMenuOpen(false);
                 }}
                 className={`p-3 rounded-2xl border text-left flex items-center justify-between transition-all cursor-pointer ${
@@ -586,9 +575,10 @@ export const Layout: React.FC<LayoutProps> = ({
                 </div>
                 <ChevronRight className="w-4 h-4 text-stone-400 shrink-0" />
               </button>
+              )}
             </div>
 
-            {/* Beli Produk ke Supplier */}
+            {canAccessTab(currentUser.role, 'stok') && (
             <button
               type="button"
               onClick={() => {
@@ -596,7 +586,7 @@ export const Layout: React.FC<LayoutProps> = ({
                 if (onNavigateToBeliSupplier) {
                   onNavigateToBeliSupplier();
                 } else {
-                  setActiveTab('stok');
+                  goTab('stok');
                 }
               }}
               className="w-full p-3 rounded-2xl border border-stone-200 dark:border-stone-800 bg-stone-50/50 dark:bg-stone-800/40 hover:bg-stone-100 text-left flex items-center justify-between transition-all cursor-pointer"
@@ -616,6 +606,7 @@ export const Layout: React.FC<LayoutProps> = ({
               </div>
               <ChevronRight className="w-4 h-4 text-stone-400 shrink-0" />
             </button>
+            )}
 
             {/* Buku Panduan Penggunaan */}
             <button

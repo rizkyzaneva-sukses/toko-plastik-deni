@@ -40,6 +40,8 @@ export enum JenisMovement {
   OPNAME_ADJUST = 'OPNAME_ADJUST',
   RETUR = 'RETUR',
   KOREKSI = 'KOREKSI',
+  MUTASI_KELUAR = 'MUTASI_KELUAR',
+  MUTASI_MASUK = 'MUTASI_MASUK',
 }
 
 export interface Outlet {

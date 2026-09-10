@@ -43,10 +43,12 @@ import {
   formatThousands,
   parseThousands,
   terbilangRupiah,
+  addDaysWIB,
 } from '../utils/formatters';
 import { SearchableSelect, SelectOption } from './SearchableSelect';
 import { ThermalReceiptModal } from './ThermalReceiptModal';
 import { ShiftModal } from './ShiftModal';
+import { UnassignedLock } from './UnassignedLock';
 
 interface CartItem {
   produk: Produk;
@@ -68,6 +70,7 @@ export const CashierView: React.FC<CashierViewProps> = ({ onNavigateToTransaksi 
     activeOutlet,
     currentUser,
     transaksiList,
+    isUserAssigned,
   } = useApp();
 
   // Mobile View Mode: 'katalog' or 'keranjang'
@@ -90,6 +93,7 @@ export const CashierView: React.FC<CashierViewProps> = ({ onNavigateToTransaksi 
   const [diskonManual, setDiskonManual] = useState<number>(0);
   const [alasanDiskon, setAlasanDiskon] = useState<string>('');
   const [jatuhTempoKredit, setJatuhTempoKredit] = useState<string>('');
+  const [metodeDp, setMetodeDp] = useState<MetodeBayar>(MetodeBayar.TUNAI);
 
   // Result thermal receipt modal state
   const [completedTx, setCompletedTx] = useState<Transaksi | null>(null);
@@ -155,13 +159,9 @@ export const CashierView: React.FC<CashierViewProps> = ({ onNavigateToTransaksi 
     setSelectedPelangganId(pId);
     const p = pelanggan.find((x) => x.id === pId);
     if (p && p.defaultTempoHari > 0) {
-      const d = new Date();
-      d.setDate(d.getDate() + p.defaultTempoHari);
-      setJatuhTempoKredit(d.toISOString().split('T')[0]);
+      setJatuhTempoKredit(addDaysWIB(p.defaultTempoHari));
     } else {
-      const d = new Date();
-      d.setDate(d.getDate() + 14); // default 14 days
-      setJatuhTempoKredit(d.toISOString().split('T')[0]);
+      setJatuhTempoKredit(addDaysWIB(14));
     }
   };
 
@@ -373,14 +373,36 @@ export const CashierView: React.FC<CashierViewProps> = ({ onNavigateToTransaksi 
       return;
     }
 
-    if (metodeBayar === MetodeBayar.KREDIT && (!selectedPelangganId || selectedPelangganId === 'pel-umum')) {
+    if (
+      (metodeBayar === MetodeBayar.KREDIT || metodeBayar === MetodeBayar.CAMPURAN) &&
+      (!selectedPelangganId || selectedPelangganId === 'pel-umum')
+    ) {
       alert('Untuk pembayaran KREDIT/TEMPO, WAJIB memilih data Pelanggan B2B langganan!');
+      return;
+    }
+
+    if (metodeBayar === MetodeBayar.CAMPURAN && uangDiterima <= 0) {
+      alert('Metode CAMPURAN wajib isi DP lebih dari Rp 0.');
       return;
     }
 
     if (isUangKurang) {
       alert('Uang yang diterima masih kurang dari total tagihan!');
       return;
+    }
+
+    const plannedSisa =
+      metodeBayar === MetodeBayar.KREDIT || metodeBayar === MetodeBayar.CAMPURAN
+        ? Math.max(0, cartSummary.finalTotal - (uangDiterima || 0))
+        : 0;
+    const nextPiutang = (customerReceivablesInfo?.totalPiutang || 0) + plannedSisa;
+    const limit = selectedPelanggan?.limitKredit ?? null;
+    if (limit !== null && plannedSisa > 0 && nextPiutang > limit) {
+      if (currentUser.role !== Role.OWNER) {
+        alert(`Limit kredit (${formatRupiah(limit)}) terlampaui. Transaksi tempo ditolak.`);
+        return;
+      }
+      if (!window.confirm('Limit kredit terlampaui. Lanjutkan sebagai Owner?')) return;
     }
 
     const payload = {
@@ -391,6 +413,7 @@ export const CashierView: React.FC<CashierViewProps> = ({ onNavigateToTransaksi 
       uangDiterima,
       jatuhTempo: metodeBayar === MetodeBayar.KREDIT || metodeBayar === MetodeBayar.CAMPURAN ? jatuhTempoKredit : null,
       alasanDiskon,
+      metodeDp,
     };
 
     const res = createTransaksi(payload);
@@ -426,8 +449,12 @@ export const CashierView: React.FC<CashierViewProps> = ({ onNavigateToTransaksi 
       });
   }, [pelanggan]);
 
+  if (!isUserAssigned) {
+    return <UnassignedLock />;
+  }
+
   return (
-    <div className="flex flex-col lg:flex-row h-full min-h-[calc(100vh-65px)] bg-stone-100 dark:bg-stone-950 pb-20 lg:pb-0 relative">
+    <div className="flex flex-col lg:flex-row h-full min-h-[calc(100vh-65px)] bg-stone-100 dark:bg-stone-950 pb-24 xl:pb-0 relative">
       {/* SHIFT WARNING BANNER */}
       {!activeShift && (
         <div className="bg-rose-500 text-white px-4 py-2.5 text-xs sm:text-sm font-semibold flex items-center justify-between shadow-md z-30">
@@ -1007,7 +1034,7 @@ export const CashierView: React.FC<CashierViewProps> = ({ onNavigateToTransaksi 
                         <button
                           type="button"
                           onClick={() => updateQty(item.produk.id, item.qty - 1)}
-                          className="w-8 h-8 min-h-[32px] flex items-center justify-center rounded-lg bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-200 hover:bg-stone-200 active:scale-95 cursor-pointer"
+                          className="w-11 h-11 min-h-[44px] flex items-center justify-center rounded-lg bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-200 hover:bg-stone-200 active:scale-95 cursor-pointer"
                         >
                           <Minus className="w-3.5 h-3.5" />
                         </button>
@@ -1016,12 +1043,12 @@ export const CashierView: React.FC<CashierViewProps> = ({ onNavigateToTransaksi 
                           min="1"
                           value={item.qty}
                           onChange={(e) => updateQty(item.produk.id, parseInt(e.target.value, 10) || 1)}
-                          className="w-12 text-center text-xs font-black bg-transparent text-stone-900 dark:text-stone-100 focus:outline-none"
+                          className="w-12 text-center text-xs font-black bg-transparent text-stone-900 dark:text-stone-100 focus:outline-none min-h-[44px]"
                         />
                         <button
                           type="button"
                           onClick={() => updateQty(item.produk.id, item.qty + 1)}
-                          className="w-8 h-8 min-h-[32px] flex items-center justify-center rounded-lg bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-200 hover:bg-stone-200 active:scale-95 cursor-pointer"
+                          className="w-11 h-11 min-h-[44px] flex items-center justify-center rounded-lg bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-200 hover:bg-stone-200 active:scale-95 cursor-pointer"
                         >
                           <Plus className="w-3.5 h-3.5" />
                         </button>
@@ -1189,12 +1216,13 @@ export const CashierView: React.FC<CashierViewProps> = ({ onNavigateToTransaksi 
               PILIH METODE PEMBAYARAN:
             </label>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1.5">
               {[
-                { id: MetodeBayar.TUNAI, label: '💵 Tunai', sub: 'Uang Pas / Lembaran' },
-                { id: MetodeBayar.QRIS, label: '📱 QRIS', sub: 'BCA / Mandiri / Shopee' },
-                { id: MetodeBayar.TRANSFER, label: '💳 Transfer Bank', sub: 'Cek Mutasi Rekening' },
-                { id: MetodeBayar.KREDIT, label: '⏳ Tempo / Bon', sub: 'Hutang B2B' },
+                { id: MetodeBayar.TUNAI, label: 'Tunai', sub: 'Uang Pas / Lembaran' },
+                { id: MetodeBayar.QRIS, label: 'QRIS', sub: 'Scan QR toko' },
+                { id: MetodeBayar.TRANSFER, label: 'Transfer', sub: 'Cek mutasi rekening' },
+                { id: MetodeBayar.KREDIT, label: 'Tempo / Bon', sub: 'Hutang B2B' },
+                { id: MetodeBayar.CAMPURAN, label: 'Campuran', sub: 'DP + sisa tempo' },
               ].map((m) => {
                 const isSelected = metodeBayar === m.id;
                 return (
@@ -1205,6 +1233,8 @@ export const CashierView: React.FC<CashierViewProps> = ({ onNavigateToTransaksi 
                       setMetodeBayar(m.id);
                       if (m.id === MetodeBayar.TUNAI) {
                         setUangDiterima(cartSummary.finalTotal);
+                      } else {
+                        setUangDiterima(0);
                       }
                     }}
                     className={`min-h-[48px] p-2 rounded-xl border text-left flex flex-col justify-center transition-all cursor-pointer ${
@@ -1341,11 +1371,15 @@ export const CashierView: React.FC<CashierViewProps> = ({ onNavigateToTransaksi 
             )}
 
             {/* DETAIL TEMPO / KREDIT */}
-            {metodeBayar === MetodeBayar.KREDIT && (
+            {(metodeBayar === MetodeBayar.KREDIT || metodeBayar === MetodeBayar.CAMPURAN) && (
               <div className="p-3.5 rounded-2xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 space-y-3">
                 <div className="flex items-center gap-1.5 text-xs font-bold text-amber-800 dark:text-amber-300">
                   <Clock className="w-4 h-4" />
-                  <span>SETELAN JATUH TEMPO KREDIT B2B</span>
+                  <span>
+                    {metodeBayar === MetodeBayar.CAMPURAN
+                      ? 'DP + SISA TEMPO (CAMPURAN)'
+                      : 'SETELAN JATUH TEMPO KREDIT B2B'}
+                  </span>
                 </div>
 
                 {selectedPelangganId === 'pel-umum' && (
@@ -1395,6 +1429,30 @@ export const CashierView: React.FC<CashierViewProps> = ({ onNavigateToTransaksi 
                     )}
                   </div>
                 </div>
+
+                {uangDiterima > 0 && (
+                  <div>
+                    <label className="block text-[11px] font-bold text-stone-700 dark:text-stone-300 mb-1">
+                      Metode DP
+                    </label>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {[MetodeBayar.TUNAI, MetodeBayar.QRIS, MetodeBayar.TRANSFER].map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => setMetodeDp(m)}
+                          className={`min-h-[44px] px-2 rounded-lg text-xs font-bold border ${
+                            metodeDp === m
+                              ? 'bg-amber-500 text-white border-amber-500'
+                              : 'bg-white dark:bg-stone-800 text-stone-700 dark:text-stone-200 border-stone-200 dark:border-stone-700'
+                          }`}
+                        >
+                          {m}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div className="pt-2 border-t border-amber-200/50 flex justify-between text-xs font-bold">
                   <span>Sisa Piutang yang Dicatat:</span>

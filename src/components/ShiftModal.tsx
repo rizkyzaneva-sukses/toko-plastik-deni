@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Lock, Unlock, AlertTriangle, CheckCircle2, DollarSign, Wallet, ArrowDownRight, ArrowUpRight } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { formatRupiah } from '../utils/formatters';
@@ -10,10 +10,20 @@ interface ShiftModalProps {
 }
 
 export const ShiftModal: React.FC<ShiftModalProps> = ({ mode, isOpen, onClose }) => {
-  const { activeShift, openShift, closeShift, currentUser, activeOutlet } = useApp();
-  const [modalAwal, setModalAwal] = useState<number>(300000);
+  const { activeShift, openShift, closeShift, currentUser, activeOutlet, saldoLaciKasir } = useApp();
+  const [modalAwal, setModalAwal] = useState<number>(0);
   const [tunaiFisik, setTunaiFisik] = useState<number>(0);
   const [errorMsg, setErrorMsg] = useState<string>('');
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setErrorMsg('');
+    if (mode === 'open') {
+      setModalAwal(saldoLaciKasir || 0);
+    } else if (activeShift) {
+      setTunaiFisik(activeShift.tunaiSistem);
+    }
+  }, [isOpen, mode, saldoLaciKasir, activeShift]);
 
   if (!isOpen) return null;
 

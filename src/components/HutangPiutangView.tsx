@@ -29,6 +29,7 @@ import {
   formatWIBDateTime,
 } from '../utils/formatters';
 import { SearchableSelect, SelectOption } from './SearchableSelect';
+import { UnassignedLock } from './UnassignedLock';
 
 export const HutangPiutangView: React.FC = () => {
   const {
@@ -43,6 +44,8 @@ export const HutangPiutangView: React.FC = () => {
     payVendorInvoice,
     currentUser,
     activeOutlet,
+    outlets,
+    isUserAssigned,
   } = useApp();
 
   // Active Tab: 'piutang' (Pelanggan) vs 'hutang' (Vendor)
@@ -53,6 +56,9 @@ export const HutangPiutangView: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState<string>('BELUM_LUNAS'); // 'ALL', 'BELUM_LUNAS', 'LEWAT_TEMPO', 'LUNAS'
   const [filterAging, setFilterAging] = useState<string>('ALL'); // 'ALL', '0_30', '31_60', '61_90', '90_PLUS'
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [outletFilter, setOutletFilter] = useState<string>(
+    currentUser.role === Role.OWNER ? 'all' : activeOutlet.id
+  );
   const [sortBy, setSortBy] = useState<'tanggal' | 'jatuhTempo' | 'sisa'>('tanggal');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
@@ -81,7 +87,7 @@ export const HutangPiutangView: React.FC = () => {
 
   // Current Date Helper
   const now = new Date();
-  const nowDateStr = now.toISOString().split('T')[0];
+  const nowDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(now);
 
   // Helper function to calculate age in days
   const calculateAgeDays = (createdDateStr: string) => {
@@ -104,10 +110,16 @@ export const HutangPiutangView: React.FC = () => {
     return diffDays >= 0 && diffDays <= 7;
   };
 
+  const effectiveOutletFilter = currentUser.role === Role.OWNER ? outletFilter : activeOutlet.id;
+
   // --- PIUTANG DATASET ---
   const piutangItems = useMemo(() => {
     return transaksiList
-      .filter((t) => !t.voided && (t.sisaPiutang > 0 || t.metodeBayar === MetodeBayar.KREDIT || t.metodeBayar === MetodeBayar.CAMPURAN))
+      .filter((t) => {
+        if (t.voided) return false;
+        if (effectiveOutletFilter !== 'all' && t.outletId !== effectiveOutletFilter) return false;
+        return t.sisaPiutang > 0 || t.metodeBayar === MetodeBayar.KREDIT || t.metodeBayar === MetodeBayar.CAMPURAN;
+      })
       .map((t) => {
         const ageDays = calculateAgeDays(t.createdAt);
         const overdue = isOverdue(t.jatuhTempo) && t.sisaPiutang > 0;
@@ -127,11 +139,13 @@ export const HutangPiutangView: React.FC = () => {
           agingBucket,
         };
       });
-  }, [transaksiList]);
+  }, [transaksiList, effectiveOutletFilter]);
 
   // --- HUTANG DATASET ---
   const hutangItems = useMemo(() => {
-    return pembelianList.map((p) => {
+    return pembelianList
+      .filter((p) => effectiveOutletFilter === 'all' || p.outletId === effectiveOutletFilter)
+      .map((p) => {
       const ageDays = calculateAgeDays(p.createdAt);
       const overdue = isOverdue(p.jatuhTempo) && p.sisaHutang > 0;
       const dueSoon = isDueSoon(p.jatuhTempo) && p.sisaHutang > 0;
@@ -151,7 +165,7 @@ export const HutangPiutangView: React.FC = () => {
         agingBucket,
       };
     });
-  }, [pembelianList]);
+  }, [pembelianList, effectiveOutletFilter]);
 
   const activeRawItems = activeTab === 'piutang' ? piutangItems : hutangItems;
 
@@ -346,7 +360,13 @@ export const HutangPiutangView: React.FC = () => {
       return;
     }
 
-    const res = payFIFOInvoices(fifoEntityId, fifoTotalAmount, MetodeBayar.TUNAI, 'Pembayaran Borongan Multi-Nota');
+    const res = payFIFOInvoices(
+      fifoEntityId,
+      fifoTotalAmount,
+      MetodeBayar.TUNAI,
+      'Pembayaran Borongan Multi-Nota',
+      effectiveOutletFilter
+    );
     if (res.success) {
       const allocatedSummary = res.allocated.map((a) => `${formatRupiah(a.nominal)}`).join(', ');
       showFeedback('success', `Berhasil alokasi FIFO ke ${res.allocated.length} nota tertua (${allocatedSummary})`);
@@ -383,6 +403,10 @@ export const HutangPiutangView: React.FC = () => {
     link.click();
     document.body.removeChild(link);
   };
+
+  if (!isUserAssigned) {
+    return <UnassignedLock />;
+  }
 
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">
@@ -524,7 +548,29 @@ export const HutangPiutangView: React.FC = () => {
 
       {/* COMPREHENSIVE FILTER & ACTION TOOLBAR */}
       <div className="p-4 rounded-2xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 shadow-2xs space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+          <div>
+            <label htmlFor="filter-outlet-piutang" className="text-xs font-semibold text-stone-700 dark:text-stone-300 block mb-1.5">
+              Outlet
+            </label>
+            {currentUser.role === Role.OWNER ? (
+              <SearchableSelect
+                id="filter-outlet-piutang"
+                options={[
+                  { value: 'all', label: 'Semua Outlet' },
+                  ...outlets.map((o) => ({ value: o.id, label: o.nama })),
+                ]}
+                value={outletFilter}
+                onChange={setOutletFilter}
+                placeholder="Outlet"
+              />
+            ) : (
+              <div className="w-full min-h-[44px] px-3 py-2 rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-xs font-semibold text-amber-900 dark:text-amber-200 flex items-center">
+                {activeOutlet.nama}
+              </div>
+            )}
+          </div>
+
           {/* Entity Filter (SearchableSelect) */}
           <SearchableSelect
             id="filter-entity"
@@ -540,17 +586,18 @@ export const HutangPiutangView: React.FC = () => {
             <label htmlFor="filter-status-select" className="text-xs font-semibold text-stone-700 dark:text-stone-300 block mb-1.5">
               Status Tagihan
             </label>
-            <select
+            <SearchableSelect
               id="filter-status-select"
+              options={[
+                { value: 'ALL', label: 'Semua Status' },
+                { value: 'BELUM_LUNAS', label: 'Belum Lunas Saja' },
+                { value: 'LEWAT_TEMPO', label: 'Sudah Lewat Tempo Saja' },
+                { value: 'LUNAS', label: 'Sudah Lunas Saja' },
+              ]}
               value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="w-full min-h-[44px] px-3 py-2 rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 text-xs font-semibold text-stone-900 dark:text-stone-100"
-            >
-              <option value="ALL">Semua Status</option>
-              <option value="BELUM_LUNAS">Belum Lunas Saja</option>
-              <option value="LEWAT_TEMPO">Sudah Lewat Tempo Saja</option>
-              <option value="LUNAS">Sudah Lunas Saja</option>
-            </select>
+              onChange={setFilterStatus}
+              placeholder="Status"
+            />
           </div>
 
           {/* Search Query */}

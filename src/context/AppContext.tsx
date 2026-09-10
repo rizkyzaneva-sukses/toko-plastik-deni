@@ -53,6 +53,7 @@ import {
   initialModalUsaha,
   initialTransaksiModal,
 } from '../data/seedData';
+import { todayWIBDate } from '../utils/formatters';
 
 interface AppContextType {
   // Auth & Navigation
@@ -123,13 +124,14 @@ interface AppContextType {
     uangDiterima: number;
     jatuhTempo: string | null;
     alasanDiskon?: string;
+    metodeDp?: MetodeBayar;
   }) => { success: boolean; transaksi?: Transaksi; error?: string };
   voidTransaksi: (transaksiId: string, alasan: string) => { success: boolean; error?: string };
 
   // Receivables (Piutang Pelanggan)
   pembayaranPiutang: PembayaranPiutang[];
   paySingleInvoice: (transaksiId: string, nominal: number, metodeBayar: MetodeBayar, catatan?: string) => { success: boolean; error?: string };
-  payFIFOInvoices: (pelangganId: string, nominalTotal: number, metodeBayar: MetodeBayar, catatan?: string) => { success: boolean; allocated: Array<{ transaksiId: string; nominal: number }>; error?: string };
+  payFIFOInvoices: (pelangganId: string, nominalTotal: number, metodeBayar: MetodeBayar, catatan?: string, outletId?: string) => { success: boolean; allocated: Array<{ transaksiId: string; nominal: number }>; error?: string };
 
   // Payables (Hutang Vendor)
   pembelianList: Pembelian[];
@@ -204,6 +206,7 @@ interface AppContextType {
   // Helper selectors
   getProdukStokForOutlet: (produkId: string, outletId?: string) => number;
   getProdukHPPForOutlet: (produkId: string, outletId?: string) => number;
+  hasStokRecordForOutlet: (produkId: string, outletId?: string) => boolean;
   resetAllData: () => void;
 
   // Compatibility helpers & extended modules
@@ -332,7 +335,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Keep activeOutletId synced when user changes
   useEffect(() => {
-    if ((currentUser.role === Role.KASIR || currentUser.role === Role.MANAGER) && currentUser.outletId) {
+    if ((currentUser.role === Role.KASIR || currentUser.role === Role.MANAGER || currentUser.role === Role.GUDANG) && currentUser.outletId) {
       setActiveOutletIdState(currentUser.outletId);
       setStoredItem('active_outlet_id', currentUser.outletId);
     }
@@ -340,7 +343,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const setActiveOutletId = (id: string) => {
     // If Kasir or Manager, prevent changing outlet away from assigned outlet!
-    if (currentUser.role === Role.KASIR || currentUser.role === Role.MANAGER) {
+    if (currentUser.role === Role.KASIR || currentUser.role === Role.MANAGER || currentUser.role === Role.GUDANG) {
       if (currentUser.outletId) {
         setActiveOutletIdState(currentUser.outletId);
         setStoredItem('active_outlet_id', currentUser.outletId);
@@ -387,6 +390,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [activeShift, setActiveShift] = useState<Shift | null>(() => getStoredItem('active_shift', initialShift));
   const [shiftHistory, setShiftHistory] = useState<Shift[]>(() => getStoredItem('shift_history', []));
+  const [saldoKasByOutlet, setSaldoKasByOutlet] = useState<Record<string, number>>(() =>
+    getStoredItem('saldo_kas', {
+      'outlet-1': initialShift?.tunaiSistem ?? 0,
+      'outlet-2': 0,
+    })
+  );
 
   const [transaksiList, setTransaksiList] = useState<Transaksi[]>(() => getStoredItem('transaksi', initialTransaksi));
   const [pembayaranPiutang, setPembayaranPiutang] = useState<PembayaranPiutang[]>(() => getStoredItem('pembayaran_piutang', initialPembayaranPiutang));
@@ -412,6 +421,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => setStoredItem('stok_movement', stokMovementList), [stokMovementList]);
   useEffect(() => setStoredItem('active_shift', activeShift), [activeShift]);
   useEffect(() => setStoredItem('shift_history', shiftHistory), [shiftHistory]);
+  useEffect(() => setStoredItem('saldo_kas', saldoKasByOutlet), [saldoKasByOutlet]);
   useEffect(() => setStoredItem('audit_logs', auditLogs), [auditLogs]);
   useEffect(() => setStoredItem('current_user', currentUser), [currentUser]);
   useEffect(() => setStoredItem('users', users), [users]);
@@ -426,10 +436,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Helper to read HPP for an outlet (guarded)
   const getProdukHPPForOutlet = (produkId: string, outletId = effectiveOutletId): number => {
-    // If Kasir, hide HPP
-    if (currentUser.role === Role.KASIR) return 0;
     const item = stokOutlet.find((s) => s.produkId === produkId && s.outletId === outletId);
     return item ? item.hpp : 0;
+  };
+
+  const hasStokRecordForOutlet = (produkId: string, outletId = effectiveOutletId): boolean => {
+    return stokOutlet.some((s) => s.produkId === produkId && s.outletId === outletId);
+  };
+
+  // Satu sumber kas: Laci. Kalau shift outlet itu sedang buka, mutasi ke tunaiSistem.
+  // Kalau tidak, mutasi ke saldo kas tersimpan supaya uang tidak hilang saat shift tutup.
+  const applyKasDelta = (outletId: string, delta: number) => {
+    if (activeShift && activeShift.outletId === outletId) {
+      setActiveShift((prev) =>
+        prev && prev.outletId === outletId
+          ? { ...prev, tunaiSistem: prev.tunaiSistem + delta }
+          : prev
+      );
+    } else {
+      setSaldoKasByOutlet((prev) => ({
+        ...prev,
+        [outletId]: Math.max(0, (prev[outletId] || 0) + delta),
+      }));
+    }
   };
 
   // Shift: Open shift
@@ -456,7 +485,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return newShift;
   };
 
-  // Shift: Close shift with physical cash count
+  // Shift: Close shift with physical cash count — uang laci tetap tersimpan
   const closeShift = (tunaiFisik: number) => {
     if (!activeShift) {
       throw new Error('Tidak ada shift yang sedang aktif');
@@ -470,6 +499,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       status: 'TUTUP',
     };
     setShiftHistory((prev) => [closedShift, ...prev]);
+    setSaldoKasByOutlet((prev) => ({
+      ...prev,
+      [closedShift.outletId]: Math.max(0, tunaiFisik),
+    }));
     setActiveShift(null);
     return { shift: closedShift, selisih };
   };
@@ -483,6 +516,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     uangDiterima: number;
     jatuhTempo: string | null;
     alasanDiskon?: string;
+    metodeDp?: MetodeBayar;
   }) => {
     if (!activeShift) {
       return { success: false, error: 'Shift kasir belum dibuka! Silakan buka shift dengan modal laci terlebih dahulu.' };
@@ -641,16 +675,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       items: txItems,
     };
 
-    // If there is cash received, update active shift's cash
+    const dpMetode = data.metodeDp || MetodeBayar.TUNAI;
     const cashAmountReceived =
       data.metodeBayar === MetodeBayar.TUNAI
         ? finalTotal
         : data.metodeBayar === MetodeBayar.CAMPURAN || data.metodeBayar === MetodeBayar.KREDIT
-        ? totalDibayar
+        ? dpMetode === MetodeBayar.TUNAI
+          ? totalDibayar
+          : 0
         : 0;
 
     const nonCashAmount =
-      data.metodeBayar === MetodeBayar.QRIS || data.metodeBayar === MetodeBayar.TRANSFER ? finalTotal : 0;
+      data.metodeBayar === MetodeBayar.QRIS || data.metodeBayar === MetodeBayar.TRANSFER
+        ? finalTotal
+        : (data.metodeBayar === MetodeBayar.CAMPURAN || data.metodeBayar === MetodeBayar.KREDIT) &&
+          (dpMetode === MetodeBayar.QRIS || dpMetode === MetodeBayar.TRANSFER)
+        ? totalDibayar
+        : 0;
 
     setActiveShift((prev) => {
       if (!prev) return prev;
@@ -672,7 +713,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         pelangganId: data.pelangganId as string,
         pelangganNama: selectedCust?.nama || 'Pelanggan',
         nominal: totalDibayar,
-        metodeBayar: data.metodeBayar === MetodeBayar.KREDIT ? MetodeBayar.TUNAI : MetodeBayar.TUNAI,
+        metodeBayar: dpMetode,
         shiftId: activeShift.id,
         userId: currentUser.id,
         userNama: currentUser.nama,
@@ -745,6 +786,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     }
 
+    // Uang yang sempat masuk laci dari nota ini
+    const tunaiPayments = pembayaranPiutang.filter(
+      (p) => p.transaksiId === tx.id && p.metodeBayar === MetodeBayar.TUNAI
+    );
+    const cashInLaci =
+      tx.metodeBayar === MetodeBayar.TUNAI
+        ? tx.total
+        : tx.metodeBayar === MetodeBayar.QRIS || tx.metodeBayar === MetodeBayar.TRANSFER
+        ? 0
+        : tunaiPayments.reduce((sum, p) => sum + p.nominal, 0);
+    const nonCashAmount =
+      tx.metodeBayar === MetodeBayar.QRIS || tx.metodeBayar === MetodeBayar.TRANSFER ? tx.total : 0;
+    const piutangTunaiLater = tunaiPayments
+      .filter((p) => p.catatan !== 'Uang Muka (DP) Transaksi')
+      .reduce((sum, p) => sum + p.nominal, 0);
+
+    if (activeShift && activeShift.outletId === tx.outletId) {
+      setActiveShift((prev) => {
+        if (!prev || prev.outletId !== tx.outletId) return prev;
+        const sameShift = prev.id === tx.shiftId;
+        return {
+          ...prev,
+          tunaiSistem: prev.tunaiSistem - cashInLaci,
+          penjualanTunai: Math.max(
+            0,
+            prev.penjualanTunai -
+              (tx.metodeBayar === MetodeBayar.TUNAI ? tx.total : 0) -
+              (tx.metodeBayar === MetodeBayar.KREDIT || tx.metodeBayar === MetodeBayar.CAMPURAN
+                ? cashInLaci - piutangTunaiLater
+                : 0)
+          ),
+          penjualanNonTunai: Math.max(0, prev.penjualanNonTunai - nonCashAmount),
+          pembayaranPiutangTunai: Math.max(0, prev.pembayaranPiutangTunai - piutangTunaiLater),
+          totalTransaksi: sameShift ? Math.max(0, prev.totalTransaksi - 1) : prev.totalTransaksi,
+        };
+      });
+    } else {
+      setSaldoKasByOutlet((prev) => ({
+        ...prev,
+        [tx.outletId]: Math.max(0, (prev[tx.outletId] || 0) - cashInLaci),
+      }));
+    }
+
     // Mark as voided
     setTransaksiList((prev) =>
       prev.map((t) => (t.id === transaksiId ? { ...t, voided: true, alasanVoid: alasan } : t))
@@ -804,29 +888,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
     setPembayaranPiutang((prev) => [paymentRecord, ...prev]);
 
-    // If cash received while cashier shift is open, update drawer balance
-    if (metodeBayar === MetodeBayar.TUNAI && activeShift) {
-      setActiveShift((prev) =>
-        prev
-          ? {
-              ...prev,
-              tunaiSistem: prev.tunaiSistem + paymentAmount,
-              pembayaranPiutangTunai: prev.pembayaranPiutangTunai + paymentAmount,
-            }
-          : prev
-      );
+    if (metodeBayar === MetodeBayar.TUNAI) {
+      if (activeShift && activeShift.outletId === tx.outletId) {
+        setActiveShift((prev) =>
+          prev && prev.outletId === tx.outletId
+            ? {
+                ...prev,
+                tunaiSistem: prev.tunaiSistem + paymentAmount,
+                pembayaranPiutangTunai: prev.pembayaranPiutangTunai + paymentAmount,
+              }
+            : prev
+        );
+      } else {
+        applyKasDelta(tx.outletId, paymentAmount);
+      }
     }
 
     return { success: true };
   };
 
   // Receivables: FIFO payment allocation across multiple invoices of a customer
-  const payFIFOInvoices = (pelangganId: string, nominalTotal: number, metodeBayar: MetodeBayar, catatan?: string) => {
+  const payFIFOInvoices = (pelangganId: string, nominalTotal: number, metodeBayar: MetodeBayar, catatan?: string, outletId?: string) => {
     if (nominalTotal <= 0) return { success: false, allocated: [], error: 'Nominal harus lebih dari 0' };
 
     // Get all outstanding invoices for this customer sorted by oldest createdAt (FIFO)
     const unpaidInvoices = transaksiList
       .filter((t) => t.pelangganId === pelangganId && !t.voided && t.sisaPiutang > 0)
+      .filter((t) => !outletId || outletId === 'all' || t.outletId === outletId)
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
     if (unpaidInvoices.length === 0) {
@@ -880,16 +968,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setPembayaranPiutang((prev) => [...newPayments, ...prev]);
 
     const totalUsed = nominalTotal - remainingFunds;
-    if (metodeBayar === MetodeBayar.TUNAI && activeShift) {
-      setActiveShift((prev) =>
-        prev
-          ? {
-              ...prev,
-              tunaiSistem: prev.tunaiSistem + totalUsed,
-              pembayaranPiutangTunai: prev.pembayaranPiutangTunai + totalUsed,
-            }
-          : prev
-      );
+    if (metodeBayar === MetodeBayar.TUNAI && totalUsed > 0) {
+      const firstInv = unpaidInvoices[0];
+      const kasOutletId = firstInv?.outletId || effectiveOutletId;
+      if (activeShift && activeShift.outletId === kasOutletId) {
+        setActiveShift((prev) =>
+          prev && prev.outletId === kasOutletId
+            ? {
+                ...prev,
+                tunaiSistem: prev.tunaiSistem + totalUsed,
+                pembayaranPiutangTunai: prev.pembayaranPiutangTunai + totalUsed,
+              }
+            : prev
+        );
+      } else {
+        applyKasDelta(kasOutletId, totalUsed);
+      }
     }
 
     return { success: true, allocated: allocatedList };
@@ -1030,6 +1124,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
     setPembayaranHutangList((prev) => [paymentRec, ...prev]);
 
+    if (metodeBayar === MetodeBayar.TUNAI) {
+      applyKasDelta(p.outletId, -payAmount);
+    }
+
     return { success: true };
   };
 
@@ -1102,7 +1200,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     // Get current HPP of sack from StokOutlet
-    const currentHppKarung = getProdukHPPForOutlet(prodInduk.id, data.outletId) || 300000;
+    const currentHppKarung = getProdukHPPForOutlet(prodInduk.id, data.outletId);
+    if (currentHppKarung <= 0) {
+      return {
+        success: false,
+        error: 'HPP karung belum tercatat di stok outlet ini. Catat pembelian/HPP dulu sebelum pecah karung.',
+      };
+    }
     // PRD formula: hpp_per_gram = hpp_karung / total_gram_hasil_aktual
     const hppPerGram = (currentHppKarung * data.jumlahKarung) / totalGramHasil;
 
@@ -1236,19 +1340,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       kategoriNama: kat?.nama || 'Pengeluaran',
       tanggal: tgl,
       nominal: data.nominal,
-      metodeBayar: data.metodeBayar,
-      sumberDana: data.sumberDana,
+      metodeBayar: MetodeBayar.TUNAI,
+      sumberDana: SumberDana.LACI_KASIR,
       keterangan: data.keterangan,
-      shiftId: data.sumberDana === SumberDana.LACI_KASIR && activeShift ? activeShift.id : null,
+      shiftId: activeShift && activeShift.outletId === data.outletId ? activeShift.id : null,
       userId: currentUser.id,
       userNama: currentUser.nama,
       createdAt: dateNow,
     };
 
-    // If deducted from LACI_KASIR, automatically deduct from active shift drawer!
-    if (data.sumberDana === SumberDana.LACI_KASIR && activeShift) {
+    if (activeShift && activeShift.outletId === data.outletId) {
       setActiveShift((prev) =>
-        prev
+        prev && prev.outletId === data.outletId
           ? {
               ...prev,
               tunaiSistem: prev.tunaiSistem - data.nominal,
@@ -1256,6 +1359,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
           : prev
       );
+    } else {
+      applyKasDelta(data.outletId, -data.nominal);
     }
 
     setPengeluaranList((prev) => [newExpense, ...prev]);
@@ -1266,10 +1371,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const target = pengeluaranList.find((p) => p.id === id);
     if (!target) return { success: false, error: 'Pengeluaran tidak ditemukan' };
 
-    // If it was deducted from active shift, restore the cash
-    if (target.shiftId && activeShift && activeShift.id === target.shiftId) {
+    if (activeShift && activeShift.outletId === target.outletId) {
       setActiveShift((prev) =>
-        prev
+        prev && prev.outletId === target.outletId
           ? {
               ...prev,
               tunaiSistem: prev.tunaiSistem + target.nominal,
@@ -1277,6 +1381,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
           : prev
       );
+    } else {
+      applyKasDelta(target.outletId, target.nominal);
     }
     setPengeluaranList((prev) => prev.filter((p) => p.id !== id));
     return { success: true };
@@ -1386,9 +1492,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         biayaKemasan: p.biayaKemasan ?? null,
         indukId: p.indukId ?? null,
         favorit: p.favorit ?? false,
+        stokMin: p.stokMin ?? 5,
         aktif: p.aktif ?? true,
       };
       setProduk((prev) => [newProd, ...prev]);
+      setStokOutlet((prev) => {
+        const next = [...prev];
+        for (const out of outlets) {
+          const exists = next.some((s) => s.produkId === newProd.id && s.outletId === out.id);
+          if (!exists) {
+            next.push({
+              id: `stk-${Date.now()}-${newProd.id}-${out.id}`,
+              produkId: newProd.id,
+              outletId: out.id,
+              stok: 0,
+              stokMinimum: newProd.stokMin ?? 5,
+              hpp: 0,
+            });
+          }
+        }
+        return next;
+      });
       return { success: true };
     }
   };
@@ -1454,7 +1578,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         id: `prod-csv-${Date.now()}-${i}`,
         kode,
         nama,
-        kategoriId: 'kat-kresek',
+        kategoriId: (() => {
+          if (katIdx >= 0 && cols[katIdx]) {
+            const katName = cols[katIdx].toLowerCase();
+            const matched = kategori.find((k) => k.nama.toLowerCase() === katName);
+            if (matched) return matched.id;
+          }
+          return kategori[0]?.id || 'kat-kresek';
+        })(),
         jenis: j,
         satuan: satuanIdx >= 0 && cols[satuanIdx] ? cols[satuanIdx] : 'pcs',
         hargaRetail: hasValidRetail ? retailVal : 0,
@@ -1524,7 +1655,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       // Category matching
-      let catId = item.kategoriId || 'kat-plastik';
+      let catId = item.kategoriId || kategori[0]?.id || 'kat-kresek';
       if (item.kategoriNama) {
         const cLower = item.kategoriNama.toLowerCase();
         if (catMap.has(cLower)) {
@@ -1666,7 +1797,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Reset to initial seed
   const resetAllData = () => {
-    localStorage.clear();
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && (key.startsWith(STORAGE_PREFIX) || key === 'tokoplastik_theme')) {
+        keysToRemove.push(key);
+      }
+    }
+    keysToRemove.forEach((key) => localStorage.removeItem(key));
     window.location.reload();
   };
 
@@ -1692,10 +1830,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }) => {
     createPengeluaran({
       outletId: data.outletId,
-      kategoriId: 'kat-exp-1',
+      kategoriId: kategoriPengeluaran[0]?.id || 'kexp-1',
       nominal: data.nominal,
       metodeBayar: MetodeBayar.TUNAI,
-      sumberDana: data.dariLaciKasir ? SumberDana.LACI_KASIR : SumberDana.KAS_BESAR,
+      sumberDana: SumberDana.LACI_KASIR,
       keterangan: data.catatan || data.keterangan || data.kategori || 'Pengeluaran Toko',
     });
   };
@@ -1741,7 +1879,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const target = users.find((u) => u.id === userId);
     if (target) {
       setCurrentUser(target);
-      if ((target.role === Role.KASIR || target.role === Role.MANAGER) && target.outletId) {
+      if ((target.role === Role.KASIR || target.role === Role.MANAGER || target.role === Role.GUDANG) && target.outletId) {
         setActiveOutletIdState(target.outletId);
         setStoredItem('active_outlet_id', target.outletId);
       }
@@ -1794,7 +1932,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Capital & Prive (Modal Usaha) Handlers
   const setSaldoAwalUsaha = (nominal: number, tanggal?: string, keterangan?: string) => {
-    const tgl = tanggal || new Date().toISOString().split('T')[0];
+    const tgl = tanggal || todayWIBDate();
     const ket = keterangan || 'Penetapan Saldo Modal Awal Usaha';
     setModalUsaha({
       saldoAwal: nominal,
@@ -1813,7 +1951,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         nominal,
         keterangan: ket,
         penyetor: currentUser.nama || 'Owner Toko',
-        sumberKasTujuan: SumberDana.BANK,
+        sumberKasTujuan: SumberDana.LACI_KASIR,
         userId: currentUser.id,
         userNama: currentUser.nama,
         createdAt: new Date().toISOString(),
@@ -1850,17 +1988,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setTransaksiModalList((prev) => [newTx, ...prev]);
 
-    // If modal injected into active cashier drawer
-    if (data.sumberKasTujuan === SumberDana.LACI_KASIR && activeShift) {
-      setActiveShift((prev) =>
-        prev
-          ? {
-              ...prev,
-              tunaiSistem: prev.tunaiSistem + data.nominal,
-            }
-          : prev
-      );
-    }
+    const targetOutlet = data.outletId || effectiveOutletId;
+    applyKasDelta(targetOutlet, data.nominal);
     return { success: true };
   };
 
@@ -1890,10 +2019,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setTransaksiModalList((prev) => [newTx, ...prev]);
 
-    // If prive taken from active drawer
-    if (data.sumberKasTujuan === SumberDana.LACI_KASIR && activeShift) {
+    const targetOutlet = data.outletId || effectiveOutletId;
+    if (activeShift && activeShift.outletId === targetOutlet) {
       setActiveShift((prev) =>
-        prev
+        prev && prev.outletId === targetOutlet
           ? {
               ...prev,
               tunaiSistem: Math.max(0, prev.tunaiSistem - data.nominal),
@@ -1901,11 +2030,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
           : prev
       );
+    } else {
+      applyKasDelta(targetOutlet, -data.nominal);
     }
     return { success: true };
   };
 
   const deleteTransaksiModal = (id: string) => {
+    const target = transaksiModalList.find((t) => t.id === id);
+    if (!target) return { success: false, error: 'Transaksi modal tidak ditemukan' };
+    const kasOutlet = target.outletId || effectiveOutletId;
+    if (target.tipe === TipeTransaksiModal.TAMBAH_MODAL) {
+      applyKasDelta(kasOutlet, -target.nominal);
+    } else if (target.tipe === TipeTransaksiModal.PRIVE) {
+      applyKasDelta(kasOutlet, target.nominal);
+    }
     setTransaksiModalList((prev) => prev.filter((t) => t.id !== id));
     return { success: true };
   };
@@ -1928,53 +2067,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [transaksiModalList]);
 
   const saldoLaciKasir = useMemo(() => {
-    return activeShift ? activeShift.tunaiSistem : 0;
-  }, [activeShift]);
+    if (activeShift && activeShift.outletId === effectiveOutletId) {
+      return activeShift.tunaiSistem;
+    }
+    return saldoKasByOutlet[effectiveOutletId] || 0;
+  }, [activeShift, effectiveOutletId, saldoKasByOutlet]);
 
-  const saldoKasBesar = useMemo(() => {
-    let balance = 15000000;
-    for (const tm of transaksiModalList) {
-      if (tm.sumberKasTujuan === SumberDana.KAS_BESAR) {
-        if (tm.tipe === TipeTransaksiModal.SALDO_AWAL || tm.tipe === TipeTransaksiModal.TAMBAH_MODAL) {
-          balance += tm.nominal;
-        } else if (tm.tipe === TipeTransaksiModal.PRIVE) {
-          balance -= tm.nominal;
-        }
-      }
-    }
-    for (const exp of pengeluaranList) {
-      if (exp.sumberDana === SumberDana.KAS_BESAR) {
-        balance -= exp.nominal;
-      }
-    }
-    return Math.max(0, balance);
-  }, [transaksiModalList, pengeluaranList]);
-
-  const saldoBank = useMemo(() => {
-    let balance = 50000000;
-    for (const tm of transaksiModalList) {
-      if (tm.sumberKasTujuan === SumberDana.BANK) {
-        if (tm.tipe === TipeTransaksiModal.SALDO_AWAL || tm.tipe === TipeTransaksiModal.TAMBAH_MODAL) {
-          balance += tm.nominal;
-        } else if (tm.tipe === TipeTransaksiModal.PRIVE) {
-          balance -= tm.nominal;
-        }
-      }
-    }
-    for (const tx of transaksiList) {
-      if (!tx.voided) {
-        if (tx.metodeBayar === MetodeBayar.TRANSFER || tx.metodeBayar === MetodeBayar.QRIS) {
-          balance += tx.total;
-        }
-      }
-    }
-    for (const exp of pengeluaranList) {
-      if (exp.sumberDana === SumberDana.BANK) {
-        balance -= exp.nominal;
-      }
-    }
-    return Math.max(0, balance);
-  }, [transaksiModalList, transaksiList, pengeluaranList]);
+  // Kas toko hanya Laci. Kas Besar & Bank tidak dipakai.
+  const saldoKasBesar = 0;
+  const saldoBank = 0;
 
   // Multi-outlet Stock Mutasi State & Handlers
   const [mutasiList, setMutasiList] = useState<MutasiStok[]>(() => {
@@ -1984,22 +2085,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       {
         id: 'mut-1',
         nomor: 'MUT-001',
-        outletAsalId: 'out-pusat',
-        outletAsalNama: 'Toko Plastik Pusat (Pasar Pagi)',
-        outletTujuanId: 'out-cabang1',
-        outletTujuanNama: 'Cabang 1 (Ruko Barat)',
+        outletAsalId: 'outlet-1',
+        outletAsalNama: 'Toko Plastik Berkah Utama',
+        outletTujuanId: 'outlet-2',
+        outletTujuanNama: 'Toko Plastik Berkah Cabang 2',
         items: [
           {
-            produkId: 'prod-kresek-bintang-15',
-            namaProduk: 'Kresek HD Bintang 15 Putih (1/2 kg)',
-            qty: 50,
+            produkId: 'prod-kres-hd15',
+            namaProduk: 'Kantong Kresek HD Bening 15x30',
+            qty: 20,
           },
         ],
         biayaKirim: 15000,
-        catatan: 'Restok rutin cabang barat',
+        catatan: 'Restok rutin cabang 2',
         status: StatusMutasi.SELESAI,
-        userId: 'usr-owner',
-        userNama: 'H. Suryanto (Owner)',
+        userId: 'user-owner',
+        userNama: 'Budi Santoso',
         createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
       },
     ];
@@ -2049,30 +2150,73 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: dateNow,
     };
 
+    const newMovements: StokMovement[] = [];
     setStokOutlet((prev) => {
       const updated = [...prev];
       for (const it of data.items) {
+        const prodItem = produk.find((x) => x.id === it.produkId);
         const idxAsal = updated.findIndex((s) => s.produkId === it.produkId && s.outletId === data.outletAsalId);
+        const prevAsal = idxAsal >= 0 ? updated[idxAsal].stok : 0;
+        const hppPindah = idxAsal >= 0 ? updated[idxAsal].hpp : 0;
+        const nextAsal = Math.max(0, prevAsal - it.qty);
         if (idxAsal >= 0) {
-          updated[idxAsal] = { ...updated[idxAsal], stok: Math.max(0, updated[idxAsal].stok - it.qty) };
+          updated[idxAsal] = { ...updated[idxAsal], stok: nextAsal };
         }
+
         const idxTujuan = updated.findIndex((s) => s.produkId === it.produkId && s.outletId === data.outletTujuanId);
+        const prevTujuan = idxTujuan >= 0 ? updated[idxTujuan].stok : 0;
+        const prevTujuanHpp = idxTujuan >= 0 ? updated[idxTujuan].hpp : hppPindah;
+        const nextTujuan = prevTujuan + it.qty;
+        const newHpp =
+          nextTujuan > 0 ? Math.round((prevTujuan * prevTujuanHpp + it.qty * hppPindah) / nextTujuan) : hppPindah;
         if (idxTujuan >= 0) {
-          updated[idxTujuan] = { ...updated[idxTujuan], stok: updated[idxTujuan].stok + it.qty };
+          updated[idxTujuan] = { ...updated[idxTujuan], stok: nextTujuan, hpp: newHpp };
         } else {
           updated.push({
             id: `stk-${Date.now()}-${it.produkId}`,
             produkId: it.produkId,
             outletId: data.outletTujuanId,
-            stok: it.qty,
+            stok: nextTujuan,
             stokMinimum: 5,
-            hpp: getProdukHPPForOutlet(it.produkId, data.outletAsalId),
+            hpp: newHpp,
           });
         }
+
+        newMovements.push({
+          id: `smov-mut-out-${Date.now()}-${it.produkId}`,
+          produkId: it.produkId,
+          namaProduk: prodItem?.nama || 'Produk',
+          outletId: data.outletAsalId,
+          jenis: JenisMovement.MUTASI_KELUAR,
+          qty: -it.qty,
+          stokSebelum: prevAsal,
+          stokSesudah: nextAsal,
+          refId: newMutasi.nomor,
+          userId: currentUser.id,
+          userNama: currentUser.nama,
+          keterangan: `Mutasi ke ${tujuan?.nama || data.outletTujuanId}`,
+          createdAt: dateNow,
+        });
+        newMovements.push({
+          id: `smov-mut-in-${Date.now()}-${it.produkId}`,
+          produkId: it.produkId,
+          namaProduk: prodItem?.nama || 'Produk',
+          outletId: data.outletTujuanId,
+          jenis: JenisMovement.MUTASI_MASUK,
+          qty: it.qty,
+          stokSebelum: prevTujuan,
+          stokSesudah: nextTujuan,
+          refId: newMutasi.nomor,
+          userId: currentUser.id,
+          userNama: currentUser.nama,
+          keterangan: `Mutasi dari ${asal?.nama || data.outletAsalId}`,
+          createdAt: dateNow,
+        });
       }
       return updated;
     });
 
+    setStokMovementList((prev) => [...newMovements, ...prev]);
     setMutasiList((prev) => [newMutasi, ...prev]);
     return { success: true };
   };
@@ -2082,9 +2226,66 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     items: Array<{ produkId: string; stokSistem: number; stokFisik: number; selisih: number; catatan: string }>;
     catatan?: string;
   }) => {
-    for (const it of data.items) {
-      submitStockOpname(data.outletId, it.produkId, it.stokFisik, it.catatan || data.catatan || 'Opname');
+    const withDiff = data.items.filter((it) => it.stokFisik !== it.stokSistem);
+    if (withDiff.length === 0) {
+      return { success: false, error: 'Hitungan fisik sama dengan stok sistem, tidak ada penyesuaian' };
     }
+
+    const dateNow = new Date().toISOString();
+    const newMovements: StokMovement[] = [];
+    const newAudits: AuditLog[] = [];
+
+    setStokOutlet((prev) => {
+      const updated = [...prev];
+      for (const it of withDiff) {
+        const prod = produk.find((p) => p.id === it.produkId);
+        if (!prod) continue;
+        const stockIdx = updated.findIndex((s) => s.produkId === it.produkId && s.outletId === data.outletId);
+        const prevStock = stockIdx >= 0 ? updated[stockIdx].stok : 0;
+        const selisih = it.stokFisik - prevStock;
+        if (stockIdx >= 0) {
+          updated[stockIdx] = { ...updated[stockIdx], stok: it.stokFisik };
+        } else {
+          updated.push({
+            id: `stk-${Date.now()}-${it.produkId}`,
+            produkId: it.produkId,
+            outletId: data.outletId,
+            stok: it.stokFisik,
+            stokMinimum: prod.stokMin ?? 5,
+            hpp: prod.hargaRetail * 0.8,
+          });
+        }
+        newMovements.push({
+          id: `smov-opname-${Date.now()}-${it.produkId}`,
+          produkId: it.produkId,
+          namaProduk: prod.nama,
+          outletId: data.outletId,
+          jenis: JenisMovement.OPNAME_ADJUST,
+          qty: selisih,
+          stokSebelum: prevStock,
+          stokSesudah: it.stokFisik,
+          refId: `OPN-${dateNow.split('T')[0]}`,
+          userId: currentUser.id,
+          userNama: currentUser.nama,
+          keterangan: `Stock Opname (${selisih > 0 ? '+' : ''}${selisih}). ${it.catatan || data.catatan || 'Opname'}`,
+          createdAt: dateNow,
+        });
+        newAudits.push({
+          id: `aud-${Date.now()}-${it.produkId}`,
+          action: 'APPROVE_OPNAME',
+          userId: currentUser.id,
+          userNama: currentUser.nama,
+          outletId: data.outletId,
+          refId: prod.kode,
+          detail: `Stock opname "${prod.nama}": dari ${prevStock} menjadi ${it.stokFisik} (${selisih}). ${it.catatan || data.catatan || ''}`,
+          createdAt: dateNow,
+        });
+      }
+      return updated;
+    });
+
+    setStokMovementList((prev) => [...newMovements, ...prev]);
+    setAuditLogs((prev) => [...newAudits, ...prev]);
     return { success: true };
   };
 
@@ -2189,6 +2390,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     auditLogs,
     getProdukStokForOutlet,
     getProdukHPPForOutlet,
+    hasStokRecordForOutlet,
     resetAllData,
     setCurrentUserRole,
     shifts,

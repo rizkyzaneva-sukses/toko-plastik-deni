@@ -32,7 +32,9 @@ import {
   formatWIBDateTime,
   formatWIBDate,
   formatNumber,
+  todayWIBDate,
 } from '../utils/formatters';
+import { SearchableSelect } from './SearchableSelect';
 import { ThermalReceiptModal } from './ThermalReceiptModal';
 
 interface TransactionsDataViewProps {
@@ -76,11 +78,11 @@ export const TransactionsDataView: React.FC<TransactionsDataViewProps> = ({ onSw
   // Filter Transactions
   const filteredTransactions = useMemo(() => {
     const now = new Date();
-    const todayStr = now.toISOString().split('T')[0];
+    const todayStr = todayWIBDate();
 
     const yesterday = new Date(now);
     yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = yesterday.toISOString().split('T')[0];
+    const yesterdayStr = todayWIBDate(yesterday);
 
     const sevenDaysAgo = new Date(now);
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
@@ -249,7 +251,7 @@ export const TransactionsDataView: React.FC<TransactionsDataViewProps> = ({ onSw
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `data-transaksi-${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `data-transaksi-${todayWIBDate()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -438,36 +440,37 @@ export const TransactionsDataView: React.FC<TransactionsDataViewProps> = ({ onSw
 
           {/* Date Filter */}
           <div className="flex items-center gap-1.5 flex-wrap">
-            <select
-              aria-label="Pilih Periode Tanggal"
-              value={dateRange}
-              onChange={(e) => setDateRange(e.target.value as any)}
-              className="min-h-[42px] px-3 py-2 rounded-xl bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-xs font-bold text-stone-800 dark:text-stone-200 cursor-pointer"
-            >
-              <option value="all">📅 Semua Waktu</option>
-              <option value="today">Hari Ini</option>
-              <option value="yesterday">Kemarin</option>
-              <option value="7days">7 Hari Terakhir</option>
-              <option value="30days">30 Hari Terakhir</option>
-              <option value="month">Bulan Ini</option>
-              <option value="custom">Rentang Kustom...</option>
-            </select>
+            <div className="min-w-[160px]">
+              <SearchableSelect
+                id="tx-periode"
+                options={[
+                  { value: 'all', label: 'Semua Waktu' },
+                  { value: 'today', label: 'Hari Ini' },
+                  { value: 'yesterday', label: 'Kemarin' },
+                  { value: '7days', label: '7 Hari Terakhir' },
+                  { value: '30days', label: '30 Hari Terakhir' },
+                  { value: 'month', label: 'Bulan Ini' },
+                  { value: 'custom', label: 'Rentang Kustom' },
+                ]}
+                value={dateRange}
+                onChange={(v) => setDateRange(v as any)}
+                placeholder="Periode"
+              />
+            </div>
 
-            {/* Outlet Filter: Owner can choose all/any outlet, non-owners are strictly locked */}
             {currentUser.role === Role.OWNER ? (
-              <select
-                aria-label="Pilih Outlet"
-                value={outletFilter}
-                onChange={(e) => setOutletFilter(e.target.value)}
-                className="min-h-[42px] px-3 py-2 rounded-xl bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-xs font-bold text-stone-800 dark:text-stone-200 cursor-pointer"
-              >
-                <option value="all">🏬 Semua Cabang Toko</option>
-                {outlets.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.nama}
-                  </option>
-                ))}
-              </select>
+              <div className="min-w-[200px]">
+                <SearchableSelect
+                  id="tx-outlet"
+                  options={[
+                    { value: 'all', label: 'Semua Cabang Toko' },
+                    ...outlets.map((o) => ({ value: o.id, label: o.nama })),
+                  ]}
+                  value={outletFilter}
+                  onChange={setOutletFilter}
+                  placeholder="Outlet"
+                />
+              </div>
             ) : (
               <div className="min-h-[42px] px-3 py-2 rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-xs font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
                 <Lock className="w-3.5 h-3.5 text-amber-600" />
@@ -476,31 +479,37 @@ export const TransactionsDataView: React.FC<TransactionsDataViewProps> = ({ onSw
             )}
 
             {/* Metode Bayar Filter */}
-            <select
-              aria-label="Filter Metode Pembayaran"
-              value={metodeFilter}
-              onChange={(e) => setMetodeFilter(e.target.value)}
-              className="min-h-[42px] px-3 py-2 rounded-xl bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-xs font-bold text-stone-800 dark:text-stone-200 cursor-pointer"
-            >
-              <option value="all">💳 Semua Metode Bayar</option>
-              <option value={MetodeBayar.TUNAI}>💵 Tunai</option>
-              <option value={MetodeBayar.QRIS}>📱 QRIS</option>
-              <option value={MetodeBayar.TRANSFER}>💳 Transfer Bank</option>
-              <option value={MetodeBayar.KREDIT}>⏳ Tempo / Bon</option>
-            </select>
+            <div className="min-w-[170px]">
+              <SearchableSelect
+                id="tx-metode"
+                options={[
+                  { value: 'all', label: 'Semua Metode Bayar' },
+                  { value: MetodeBayar.TUNAI, label: 'Tunai' },
+                  { value: MetodeBayar.QRIS, label: 'QRIS' },
+                  { value: MetodeBayar.TRANSFER, label: 'Transfer Bank' },
+                  { value: MetodeBayar.KREDIT, label: 'Tempo / Bon' },
+                  { value: MetodeBayar.CAMPURAN, label: 'Campuran' },
+                ]}
+                value={metodeFilter}
+                onChange={setMetodeFilter}
+                placeholder="Metode"
+              />
+            </div>
 
-            {/* Status Bayar Filter */}
-            <select
-              aria-label="Filter Status Pembayaran"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="min-h-[42px] px-3 py-2 rounded-xl bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-xs font-bold text-stone-800 dark:text-stone-200 cursor-pointer"
-            >
-              <option value="all">Semua Status</option>
-              <option value="LUNAS">✅ Lunas</option>
-              <option value="BELUM_BAYAR">⏳ Belum Lunas (Piutang)</option>
-              <option value="VOID">🚫 Dibatalkan (Void)</option>
-            </select>
+            <div className="min-w-[160px]">
+              <SearchableSelect
+                id="tx-status"
+                options={[
+                  { value: 'all', label: 'Semua Status' },
+                  { value: 'LUNAS', label: 'Lunas' },
+                  { value: 'BELUM_BAYAR', label: 'Belum Lunas' },
+                  { value: 'VOID', label: 'Dibatalkan (Void)' },
+                ]}
+                value={statusFilter}
+                onChange={setStatusFilter}
+                placeholder="Status"
+              />
+            </div>
           </div>
         </div>
 

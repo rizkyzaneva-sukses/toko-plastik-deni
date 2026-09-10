@@ -15,6 +15,7 @@ import { useApp } from '../context/AppContext';
 import { JenisProduk } from '../types';
 import { formatRupiah, formatWIBDateTime, formatNumber } from '../utils/formatters';
 import { SearchableSelect, SelectOption } from './SearchableSelect';
+import { UnassignedLock } from './UnassignedLock';
 
 export const PecahKarungView: React.FC = () => {
   const {
@@ -26,6 +27,7 @@ export const PecahKarungView: React.FC = () => {
     getProdukStokForOutlet,
     getProdukHPPForOutlet,
     currentUser,
+    isUserAssigned,
   } = useApp();
 
   // Selected Sack Product
@@ -200,6 +202,10 @@ export const PecahKarungView: React.FC = () => {
     subtitle: `Stok: ${getProdukStokForOutlet(p.id, activeOutlet.id)} ${p.satuan} · HPP: ${formatRupiah(getProdukHPPForOutlet(p.id, activeOutlet.id))}`,
     badge: 'KARUNG',
   }));
+
+  if (!isUserAssigned) {
+    return <UnassignedLock />;
+  }
 
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-6">

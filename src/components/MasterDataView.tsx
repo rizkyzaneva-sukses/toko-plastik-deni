@@ -14,9 +14,11 @@ import {
   FileSpreadsheet,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { JenisProduk, Produk, Pelanggan, Supplier } from '../types';
+import { JenisProduk, Produk, Pelanggan, Supplier, Role } from '../types';
 import { formatRupiah, formatNumber } from '../utils/formatters';
 import { ExportImportModal } from './ExportImportModal';
+import { UnassignedLock } from './UnassignedLock';
+import { SearchableSelect } from './SearchableSelect';
 
 interface MasterDataViewProps {
   onOrderFromSupplier?: (supplierId: string) => void;
@@ -36,9 +38,16 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
     updatePelanggan,
     addSupplier,
     activeOutlet,
+    isUserAssigned,
+    users,
+    addUser,
+    updateUser,
+    deleteUser,
+    outlets,
+    currentUser,
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'produk' | 'pelanggan' | 'supplier'>('produk');
+  const [activeTab, setActiveTab] = useState<'produk' | 'pelanggan' | 'supplier' | 'pengguna'>('produk');
   const [search, setSearch] = useState('');
   const [isExportImportOpen, setIsExportImportOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -49,7 +58,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
   const [prodForm, setProdForm] = useState<Partial<Produk>>({
     kode: '',
     nama: '',
-    kategoriId: 'kat-plastik',
+    kategoriId: 'kat-kresek',
     jenis: JenisProduk.STANDAR,
     satuan: 'pack',
     hargaRetail: 10000,
@@ -84,6 +93,15 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
     rekeningBank: '',
     aktif: true,
   });
+
+  const [isUserModalOpen, setIsUserModalOpen] = useState(false);
+  const [userForm, setUserForm] = useState({
+    nama: '',
+    username: '',
+    role: Role.KASIR as Role,
+    outletId: 'outlet-1' as string | null,
+  });
+  const [userError, setUserError] = useState<string>('');
 
   // Filtered Products
   const filteredProducts = useMemo(() => {
@@ -123,7 +141,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
       setProdForm({
         kode: nextSku,
         nama: '',
-        kategoriId: 'kat-plastik',
+        kategoriId: 'kat-kresek',
         jenis: JenisProduk.STANDAR,
         satuan: 'pack',
         hargaRetail: 10000,
@@ -167,6 +185,27 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
     addSupplier(suppForm as any);
     setIsSuppModalOpen(false);
   };
+
+  const handleSaveUser = (e: React.FormEvent) => {
+    e.preventDefault();
+    const res = addUser({
+      nama: userForm.nama,
+      username: userForm.username,
+      role: userForm.role,
+      outletId: userForm.role === Role.OWNER ? null : userForm.outletId,
+    });
+    if (!res.success) {
+      setUserError(res.error || 'Gagal menambah pengguna');
+      return;
+    }
+    setIsUserModalOpen(false);
+    setUserError('');
+    setUserForm({ nama: '', username: '', role: Role.KASIR, outletId: 'outlet-1' });
+  };
+
+  if (!isUserAssigned) {
+    return <UnassignedLock />;
+  }
 
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">
@@ -222,6 +261,19 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
               <span>Tambah Supplier</span>
             </button>
           )}
+
+          {activeTab === 'pengguna' && currentUser.role === Role.OWNER && (
+            <button
+              onClick={() => {
+                setUserError('');
+                setIsUserModalOpen(true);
+              }}
+              className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs flex items-center gap-1.5 shadow-2xs cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Tambah Pengguna</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -231,6 +283,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
           { id: 'produk', label: `Katalog Produk (${produk.length})`, icon: Package },
           { id: 'pelanggan', label: `Pelanggan & Limit Kredit (${pelanggan.length})`, icon: Users },
           { id: 'supplier', label: `Supplier Vendor (${suppliers.length})`, icon: Truck },
+          { id: 'pengguna', label: `Pengguna (${users.length})`, icon: Users },
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -423,6 +476,102 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
         </div>
       )}
 
+      {activeTab === 'pengguna' && (
+        <div className="bg-white dark:bg-stone-900 rounded-2xl border border-stone-200 dark:border-stone-800 shadow-2xs overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs text-left">
+              <thead className="border-b border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-stone-800/60 text-stone-500">
+                <tr>
+                  <th className="py-3 px-3.5 font-bold">Nama</th>
+                  <th className="py-3 px-3.5 font-bold">Username</th>
+                  <th className="py-3 px-3.5 font-bold">Role</th>
+                  <th className="py-3 px-3.5 font-bold">Outlet</th>
+                  <th className="py-3 px-3.5 font-bold text-right">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-stone-100 dark:divide-stone-800">
+                {users.map((u) => {
+                  const assigned = outlets.find((o) => o.id === u.outletId);
+                  return (
+                    <tr key={u.id} className="hover:bg-stone-50 dark:hover:bg-stone-800/40">
+                      <td className="py-3 px-3.5 font-bold text-stone-900 dark:text-stone-100">{u.nama}</td>
+                      <td className="py-3 px-3.5 font-mono">{u.username}</td>
+                      <td className="py-3 px-3.5">{u.role}</td>
+                      <td className="py-3 px-3.5">
+                        {u.role === Role.OWNER ? 'Global' : assigned?.nama || 'Belum ditugaskan'}
+                      </td>
+                      <td className="py-3 px-3.5 text-right">
+                        {currentUser.role === Role.OWNER && u.id !== currentUser.id ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const res = deleteUser(u.id);
+                              if (!res.success) alert(res.error);
+                            }}
+                            className="px-3 py-1.5 rounded-xl text-rose-600 font-bold hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                          >
+                            Hapus
+                          </button>
+                        ) : (
+                          <span className="text-stone-400">Aktif</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'pengguna' && (
+        <div className="bg-white dark:bg-stone-900 rounded-2xl border border-stone-200 dark:border-stone-800 shadow-2xs overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs text-left">
+              <thead className="border-b border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-stone-800/60 text-stone-500">
+                <tr>
+                  <th className="py-3 px-3.5 font-bold">Nama</th>
+                  <th className="py-3 px-3.5 font-bold">Username</th>
+                  <th className="py-3 px-3.5 font-bold">Role</th>
+                  <th className="py-3 px-3.5 font-bold">Outlet</th>
+                  <th className="py-3 px-3.5 font-bold text-right">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-stone-100 dark:divide-stone-800">
+                {users.map((u) => {
+                  const assigned = outlets.find((o) => o.id === u.outletId);
+                  return (
+                    <tr key={u.id} className="hover:bg-stone-50 dark:hover:bg-stone-800/40">
+                      <td className="py-3 px-3.5 font-bold text-stone-900 dark:text-stone-100">{u.nama}</td>
+                      <td className="py-3 px-3.5 font-mono">{u.username}</td>
+                      <td className="py-3 px-3.5">{u.role}</td>
+                      <td className="py-3 px-3.5">{u.role === Role.OWNER ? 'Global' : assigned?.nama || 'Belum ditugaskan'}</td>
+                      <td className="py-3 px-3.5 text-right">
+                        {currentUser.role === Role.OWNER && u.id !== currentUser.id ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const res = deleteUser(u.id);
+                              if (!res.success) alert(res.error);
+                            }}
+                            className="px-3 py-1.5 rounded-xl text-rose-600 font-bold hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                          >
+                            Hapus
+                          </button>
+                        ) : (
+                          <span className="text-stone-400">Aktif</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* PRODUCT MODAL */}
       {isProdModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
@@ -454,17 +603,13 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
                   <label className="block text-xs font-semibold text-stone-700 dark:text-stone-300 mb-1">
                     Kategori
                   </label>
-                  <select
-                    value={prodForm.kategoriId}
-                    onChange={(e) => setProdForm({ ...prodForm, kategoriId: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-stone-300 dark:border-stone-700 text-xs font-bold"
-                  >
-                    {kategori.map((k) => (
-                      <option key={k.id} value={k.id}>
-                        {k.nama}
-                      </option>
-                    ))}
-                  </select>
+                  <SearchableSelect
+                    id="prod-kategori"
+                    options={kategori.map((k) => ({ value: k.id, label: k.nama }))}
+                    value={prodForm.kategoriId || ''}
+                    onChange={(v) => setProdForm({ ...prodForm, kategoriId: v })}
+                    placeholder="Pilih kategori"
+                  />
                 </div>
               </div>
 
@@ -487,15 +632,18 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
                   <label className="block text-xs font-semibold text-stone-700 dark:text-stone-300 mb-1">
                     Jenis Produk
                   </label>
-                  <select
-                    value={prodForm.jenis}
-                    onChange={(e) => setProdForm({ ...prodForm, jenis: e.target.value as any })}
-                    className="w-full px-2 py-2 rounded-xl border border-stone-300 dark:border-stone-700 text-xs"
-                  >
-                    <option value={JenisProduk.STANDAR}>STANDAR</option>
-                    <option value={JenisProduk.KARUNG}>KARUNG</option>
-                    <option value={JenisProduk.ECER}>ECER</option>
-                  </select>
+                  <SearchableSelect
+                    id="prod-jenis"
+                    options={[
+                      { value: JenisProduk.STANDAR, label: 'STANDAR' },
+                      { value: JenisProduk.KARUNG, label: 'KARUNG' },
+                      { value: JenisProduk.ECER, label: 'ECER' },
+                      { value: JenisProduk.SATUAN, label: 'SATUAN' },
+                    ]}
+                    value={prodForm.jenis || JenisProduk.STANDAR}
+                    onChange={(v) => setProdForm({ ...prodForm, jenis: v as JenisProduk })}
+                    placeholder="Jenis"
+                  />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-stone-700 dark:text-stone-300 mb-1">
@@ -868,7 +1016,61 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
         }}
       />
 
-      {/* Toast Notification */}
+      {isUserModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
+          <form
+            onSubmit={handleSaveUser}
+            className="w-full max-w-md bg-white dark:bg-stone-900 rounded-2xl p-5 space-y-3 border border-stone-200 dark:border-stone-800"
+          >
+            <h3 className="font-black text-sm">Tambah Pengguna</h3>
+            {userError && <p className="text-xs text-rose-600 font-semibold">{userError}</p>}
+            <input
+              required
+              placeholder="Nama lengkap"
+              value={userForm.nama}
+              onChange={(e) => setUserForm({ ...userForm, nama: e.target.value })}
+              className="w-full min-h-[44px] px-3 rounded-xl border border-stone-300 dark:border-stone-700 text-sm"
+            />
+            <input
+              required
+              placeholder="Username"
+              value={userForm.username}
+              onChange={(e) => setUserForm({ ...userForm, username: e.target.value })}
+              className="w-full min-h-[44px] px-3 rounded-xl border border-stone-300 dark:border-stone-700 text-sm"
+            />
+            <SearchableSelect
+              id="user-role"
+              label="Role"
+              options={[
+                { value: Role.OWNER, label: 'OWNER' },
+                { value: Role.MANAGER, label: 'MANAGER' },
+                { value: Role.KASIR, label: 'KASIR' },
+                { value: Role.GUDANG, label: 'GUDANG' },
+              ]}
+              value={userForm.role}
+              onChange={(v) => setUserForm({ ...userForm, role: v as Role })}
+            />
+            {userForm.role !== Role.OWNER && (
+              <SearchableSelect
+                id="user-outlet"
+                label="Outlet"
+                options={outlets.map((o) => ({ value: o.id, label: o.nama }))}
+                value={userForm.outletId || ''}
+                onChange={(v) => setUserForm({ ...userForm, outletId: v })}
+              />
+            )}
+            <div className="flex justify-end gap-2 pt-2">
+              <button type="button" onClick={() => setIsUserModalOpen(false)} className="px-4 py-2 rounded-xl text-xs font-bold">
+                Batal
+              </button>
+              <button type="submit" className="px-4 py-2 rounded-xl bg-amber-500 text-white text-xs font-bold">
+                Simpan
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {toastMessage && (
         <div className="fixed bottom-20 sm:bottom-6 right-6 z-50 p-4 rounded-2xl bg-stone-900 text-white shadow-xl flex items-center gap-3 border border-stone-700 animate-in fade-in slide-in-from-bottom-2 text-xs font-bold">
           <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />

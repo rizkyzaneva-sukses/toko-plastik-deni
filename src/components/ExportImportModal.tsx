@@ -116,7 +116,7 @@ export const ExportImportModal: React.FC<ExportImportModalProps> = ({
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    const dateStr = new Date().toISOString().split('T')[0];
+    const dateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date());
     link.setAttribute('href', url);
     link.setAttribute('download', `data_produk_${activeOutlet.nama.replace(/\s+/g, '_')}_${dateStr}.csv`);
     document.body.appendChild(link);

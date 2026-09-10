@@ -43,6 +43,7 @@ export const StockInventoryView: React.FC<StockInventoryViewProps> = ({
     recordPembelian,
     getProdukStokForOutlet,
     getProdukHPPForOutlet,
+    hasStokRecordForOutlet,
     currentUser,
     isUserAssigned,
     suppliers,
@@ -107,15 +108,17 @@ export const StockInventoryView: React.FC<StockInventoryViewProps> = ({
     return produk
       .filter((p) => p.aktif)
       .map((p) => {
-        const stok = getProdukStokForOutlet(p.id, effectiveOutletFilter);
-        const hpp = getProdukHPPForOutlet(p.id, effectiveOutletFilter);
+        const hasRecord = hasStokRecordForOutlet(p.id, effectiveOutletFilter);
+        const stok = hasRecord ? getProdukStokForOutlet(p.id, effectiveOutletFilter) : 0;
+        const hpp = hasRecord ? getProdukHPPForOutlet(p.id, effectiveOutletFilter) : 0;
         const totalNilai = stok * hpp;
         const minLimit = p.stokMin ?? 5;
-        const isLow = stok <= minLimit;
-        const isOut = stok <= 0;
+        const isLow = hasRecord && stok <= minLimit;
+        const isOut = hasRecord && stok <= 0;
 
         return {
           ...p,
+          hasRecord,
           stok,
           hpp,
           totalNilai,
@@ -130,12 +133,12 @@ export const StockInventoryView: React.FC<StockInventoryViewProps> = ({
         const q = searchTerm.toLowerCase();
         return item.nama.toLowerCase().includes(q) || item.kode.toLowerCase().includes(q);
       });
-  }, [produk, effectiveOutletFilter, showLowStockOnly, searchTerm, getProdukStokForOutlet, getProdukHPPForOutlet]);
+  }, [produk, effectiveOutletFilter, showLowStockOnly, searchTerm, getProdukStokForOutlet, getProdukHPPForOutlet, hasStokRecordForOutlet]);
 
   // Products that have reached critical minimum stock or are out of stock
   const criticalStockItems = useMemo(() => {
     return produk
-      .filter((p) => p.aktif)
+      .filter((p) => p.aktif && hasStokRecordForOutlet(p.id, effectiveOutletFilter))
       .map((p) => {
         const stok = getProdukStokForOutlet(p.id, effectiveOutletFilter);
         const minLimit = p.stokMin ?? 5;
@@ -155,7 +158,7 @@ export const StockInventoryView: React.FC<StockInventoryViewProps> = ({
         if (!a.isOut && b.isOut) return 1;
         return a.stok - b.stok;
       });
-  }, [produk, effectiveOutletFilter, getProdukStokForOutlet]);
+  }, [produk, effectiveOutletFilter, getProdukStokForOutlet, hasStokRecordForOutlet]);
 
   const outOfStockCount = useMemo(() => {
     return criticalStockItems.filter((i) => i.isOut).length;
@@ -169,15 +172,16 @@ export const StockInventoryView: React.FC<StockInventoryViewProps> = ({
 
     for (const p of produk) {
       if (!p.aktif) continue;
-      const s = getProdukStokForOutlet(p.id, selectedOutletFilter);
-      const h = getProdukHPPForOutlet(p.id, selectedOutletFilter);
+      if (!hasStokRecordForOutlet(p.id, effectiveOutletFilter)) continue;
+      const s = getProdukStokForOutlet(p.id, effectiveOutletFilter);
+      const h = getProdukHPPForOutlet(p.id, effectiveOutletFilter);
       totalItems += s;
       totalNilaiAset += s * h;
       if (s <= (p.stokMin ?? 5)) lowStockCount += 1;
     }
 
     return { totalItems, totalNilaiAset, lowStockCount };
-  }, [produk, selectedOutletFilter, getProdukStokForOutlet, getProdukHPPForOutlet]);
+  }, [produk, effectiveOutletFilter, getProdukStokForOutlet, getProdukHPPForOutlet, hasStokRecordForOutlet]);
 
   // Quick Restock Handler: pre-fills the purchase form and jumps straight to it
   const handleQuickRestock = (productId: string) => {
@@ -265,7 +269,7 @@ export const StockInventoryView: React.FC<StockInventoryViewProps> = ({
     const selisih = opnameFisik - currentSysStock;
 
     const res = processStockOpname({
-      outletId: activeOutlet.id,
+      outletId: effectiveOutletFilter,
       items: [
         {
           produkId: opnameProdukId,
@@ -387,19 +391,15 @@ export const StockInventoryView: React.FC<StockInventoryViewProps> = ({
         {/* Outlet Switcher & Supplier Action */}
         <div className="flex flex-wrap items-center gap-2">
           {currentUser.role === Role.OWNER ? (
-            <div className="flex items-center gap-1.5">
-              <Building2 className="w-4 h-4 text-stone-400" />
-              <select
+            <div className="flex items-center gap-1.5 min-w-[220px]">
+              <Building2 className="w-4 h-4 text-stone-400 shrink-0" />
+              <SearchableSelect
+                id="stok-outlet"
+                options={outlets.map((o) => ({ value: o.id, label: o.nama }))}
                 value={selectedOutletFilter}
-                onChange={(e) => setSelectedOutletFilter(e.target.value)}
-                className="px-3 py-2 rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 text-xs font-bold text-stone-900 dark:text-stone-100"
-              >
-                {outlets.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    Outlet: {o.nama}
-                  </option>
-                ))}
-              </select>
+                onChange={setSelectedOutletFilter}
+                placeholder="Pilih outlet"
+              />
             </div>
           ) : (
             <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-xs font-bold text-amber-900 dark:text-amber-200">
@@ -451,7 +451,7 @@ export const StockInventoryView: React.FC<StockInventoryViewProps> = ({
                   </span>
                   {outOfStockCount > 0 && (
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-red-700 text-white animate-bounce shadow-2xs">
-                      {outOfStockCount} Stok Habis Total (0)
+                      {outOfStockCount} Stok Habis
                     </span>
                   )}
                 </div>
@@ -511,7 +511,7 @@ export const StockInventoryView: React.FC<StockInventoryViewProps> = ({
                       : 'bg-amber-500 text-white'
                   }`}
                 >
-                  {item.isOut ? 'HABIS (0)' : `Sisa ${item.stok} / Min ${item.minLimit}`}
+                  {item.isOut ? 'HABIS' : `Sisa ${item.stok} / Min ${item.minLimit}`}
                 </span>
                 <button
                   type="button"
@@ -712,11 +712,15 @@ export const StockInventoryView: React.FC<StockInventoryViewProps> = ({
                           <span>{item.nama}</span>
                           {item.isOut ? (
                             <span className="text-[10px] px-1.5 py-0.2 rounded bg-rose-600 text-white font-black animate-pulse shadow-2xs">
-                              🔴 HABIS TOTAL (0)
+                              HABIS
                             </span>
                           ) : item.isLow ? (
                             <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500 text-white font-black shadow-2xs">
-                              ⚠️ KRITIS (MIN {item.minLimit})
+                              KRITIS (MIN {item.minLimit})
+                            </span>
+                          ) : !item.hasRecord ? (
+                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-300 font-bold">
+                              Belum dicatat
                             </span>
                           ) : null}
                         </div>
@@ -737,7 +741,7 @@ export const StockInventoryView: React.FC<StockInventoryViewProps> = ({
                               : 'text-stone-900 dark:text-stone-100'
                           }`}
                         >
-                          {formatNumber(item.stok)}
+                          {item.hasRecord ? formatNumber(item.stok) : '—'}
                         </span>
                         {item.isOut && (
                           <div className="text-[9.5px] font-extrabold text-rose-600 uppercase leading-none mt-0.5">
@@ -829,40 +833,28 @@ export const StockInventoryView: React.FC<StockInventoryViewProps> = ({
                   <label htmlFor="mutasi-asal-select" className="block text-xs font-semibold text-stone-700 dark:text-stone-300 mb-1">
                     Outlet Asal (Pengirim)
                   </label>
-                  <select
+                  <SearchableSelect
                     id="mutasi-asal-select"
+                    options={outlets.map((o) => ({ value: o.id, label: o.nama }))}
                     value={mutasiAsal}
-                    onChange={(e) => setMutasiAsal(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 text-xs font-bold"
-                  >
-                    {outlets.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.nama}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setMutasiAsal}
+                    placeholder="Outlet asal"
+                  />
                 </div>
 
                 <div>
                   <label htmlFor="mutasi-tujuan-select" className="block text-xs font-semibold text-stone-700 dark:text-stone-300 mb-1">
                     Outlet Tujuan (Penerima)
                   </label>
-                  <select
+                  <SearchableSelect
                     id="mutasi-tujuan-select"
-                    value={mutasiTujuan}
-                    onChange={(e) => setMutasiTujuan(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 text-xs font-bold"
-                    required
-                  >
-                    <option value="">Pilih Tujuan...</option>
-                    {outlets
+                    options={outlets
                       .filter((o) => o.id !== mutasiAsal)
-                      .map((o) => (
-                        <option key={o.id} value={o.id}>
-                          {o.nama}
-                        </option>
-                      ))}
-                  </select>
+                      .map((o) => ({ value: o.id, label: o.nama }))}
+                    value={mutasiTujuan}
+                    onChange={setMutasiTujuan}
+                    placeholder="Pilih tujuan"
+                  />
                 </div>
               </div>
 

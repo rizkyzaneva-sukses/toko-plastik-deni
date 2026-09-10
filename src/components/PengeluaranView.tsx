@@ -19,7 +19,8 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { MetodeBayar, SumberDana, Role, Pengeluaran } from '../types';
-import { formatRupiah, formatWIBDate, formatWIBDateTime } from '../utils/formatters';
+import { formatRupiah, formatWIBDate, formatWIBDateTime, todayWIBDate } from '../utils/formatters';
+import { SearchableSelect } from './SearchableSelect';
 
 export const PengeluaranView: React.FC = () => {
   const {
@@ -58,12 +59,10 @@ export const PengeluaranView: React.FC = () => {
   const [targetOutletId, setTargetOutletId] = useState<string>(activeOutlet.id);
   const [kategoriId, setKategoriId] = useState<string>(kategoriPengeluaran[0]?.id || 'kat-exp-1');
   const [nominal, setNominal] = useState<number | ''>('');
-  const [sumberDana, setSumberDana] = useState<SumberDana>(
-    activeShift ? SumberDana.LACI_KASIR : SumberDana.KAS_BESAR
-  );
+  const [sumberDana, setSumberDana] = useState<SumberDana>(SumberDana.LACI_KASIR);
   const [metodeBayar, setMetodeBayar] = useState<MetodeBayar>(MetodeBayar.TUNAI);
   const [keterangan, setKeterangan] = useState<string>('');
-  const [tanggal, setTanggal] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [tanggal, setTanggal] = useState<string>(todayWIBDate());
   const [formError, setFormError] = useState<string | null>(null);
 
   // Filters
@@ -310,33 +309,32 @@ export const PengeluaranView: React.FC = () => {
           </div>
 
           {/* Category Filter */}
-          <select
-            value={filterCategory}
-            onChange={(e) => setFilterCategory(e.target.value)}
-            className="px-3 py-1.5 rounded-xl border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-800 text-xs font-bold text-stone-700 dark:text-stone-300 cursor-pointer"
-          >
-            <option value="all">Semua Kategori</option>
-            {kategoriPengeluaran.map((k) => (
-              <option key={k.id} value={k.id}>
-                {k.nama}
-              </option>
-            ))}
-          </select>
+          <div className="min-w-[180px]">
+            <SearchableSelect
+              id="filter-kat-exp"
+              options={[
+                { value: 'all', label: 'Semua Kategori' },
+                ...kategoriPengeluaran.map((k) => ({ value: k.id, label: k.nama })),
+              ]}
+              value={filterCategory}
+              onChange={setFilterCategory}
+              placeholder="Kategori"
+            />
+          </div>
 
-          {/* Outlet Filter for Owner */}
           {currentUser.role === Role.OWNER && (
-            <select
-              value={filterOutlet}
-              onChange={(e) => setFilterOutlet(e.target.value)}
-              className="px-3 py-1.5 rounded-xl border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-800 text-xs font-bold text-stone-700 dark:text-stone-300 cursor-pointer"
-            >
-              <option value="all">Semua Outlet Cabang</option>
-              {outlets.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.nama}
-                </option>
-              ))}
-            </select>
+            <div className="min-w-[200px]">
+              <SearchableSelect
+                id="filter-outlet-exp"
+                options={[
+                  { value: 'all', label: 'Semua Outlet Cabang' },
+                  ...outlets.map((o) => ({ value: o.id, label: o.nama })),
+                ]}
+                value={filterOutlet}
+                onChange={setFilterOutlet}
+                placeholder="Outlet"
+              />
+            </div>
           )}
         </div>
 
@@ -482,17 +480,13 @@ export const PengeluaranView: React.FC = () => {
                   Cabang Outlet
                 </label>
                 {currentUser.role === Role.OWNER ? (
-                  <select
+                  <SearchableSelect
+                    id="form-outlet-exp"
+                    options={outlets.map((o) => ({ value: o.id, label: o.nama }))}
                     value={targetOutletId}
-                    onChange={(e) => setTargetOutletId(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100 font-semibold"
-                  >
-                    {outlets.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.nama}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setTargetOutletId}
+                    placeholder="Pilih outlet"
+                  />
                 ) : (
                   <div className="px-3 py-2 rounded-xl border border-stone-200 dark:border-stone-700 bg-stone-100 dark:bg-stone-800/60 text-stone-800 dark:text-stone-200 font-bold flex items-center justify-between">
                     <span>{activeOutlet.nama}</span>
@@ -506,17 +500,13 @@ export const PengeluaranView: React.FC = () => {
                 <label className="block font-bold text-stone-700 dark:text-stone-300 mb-1">
                   Kategori Pengeluaran
                 </label>
-                <select
+                <SearchableSelect
+                  id="form-kat-exp"
+                  options={kategoriPengeluaran.map((k) => ({ value: k.id, label: k.nama }))}
                   value={kategoriId}
-                  onChange={(e) => setKategoriId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100 font-semibold"
-                >
-                  {kategoriPengeluaran.map((k) => (
-                    <option key={k.id} value={k.id}>
-                      {k.nama}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setKategoriId}
+                  placeholder="Pilih kategori"
+                />
               </div>
 
               {/* Nominal & Quick Chips */}
@@ -548,59 +538,15 @@ export const PengeluaranView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Sumber Dana Kas */}
               <div>
                 <label className="block font-bold text-stone-700 dark:text-stone-300 mb-1">
-                  Sumber Dana Kas
+                  Sumber Dana
                 </label>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSumberDana(SumberDana.LACI_KASIR);
-                      setMetodeBayar(MetodeBayar.TUNAI);
-                    }}
-                    className={`p-2 rounded-xl border text-center font-bold transition-all cursor-pointer ${
-                      sumberDana === SumberDana.LACI_KASIR
-                        ? 'border-rose-500 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300'
-                        : 'border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-400'
-                    }`}
-                  >
-                    <div>Laci Kasir</div>
-                    <div className="text-[10px] font-normal opacity-80">Shift Aktif</div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSumberDana(SumberDana.KAS_BESAR);
-                      setMetodeBayar(MetodeBayar.TUNAI);
-                    }}
-                    className={`p-2 rounded-xl border text-center font-bold transition-all cursor-pointer ${
-                      sumberDana === SumberDana.KAS_BESAR
-                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300'
-                        : 'border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-400'
-                    }`}
-                  >
-                    <div>Kas Besar</div>
-                    <div className="text-[10px] font-normal opacity-80">Brankas Toko</div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSumberDana(SumberDana.BANK);
-                      setMetodeBayar(MetodeBayar.TRANSFER);
-                    }}
-                    className={`p-2 rounded-xl border text-center font-bold transition-all cursor-pointer ${
-                      sumberDana === SumberDana.BANK
-                        ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'
-                        : 'border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-400'
-                    }`}
-                  >
-                    <div>Rek. Bank</div>
-                    <div className="text-[10px] font-normal opacity-80">Transfer</div>
-                  </button>
+                <div className="p-3 rounded-xl border border-rose-200 dark:border-rose-900 bg-rose-50/70 dark:bg-rose-950/30 text-rose-800 dark:text-rose-300">
+                  <div className="font-bold">Laci Kasir</div>
+                  <div className="text-[10px] font-normal opacity-80 mt-0.5">
+                    Semua pengeluaran dipotong dari kas laci toko
+                  </div>
                 </div>
               </div>
 
