@@ -57,11 +57,13 @@ import { todayWIBDate } from '../utils/formatters';
 
 interface AppContextType {
   // Auth & Navigation
+  isLoggedIn: boolean;
   currentUser: User;
   setCurrentUser: (user: User) => void;
   switchUser: (userId: string) => void;
+  logout: () => void;
   users: User[];
-  addUser: (u: { nama: string; username: string; role: Role; outletId: string | null }) => { success: boolean; error?: string };
+  addUser: (u: { nama: string; username: string; password: string; role: Role; outletId: string | null }) => { success: boolean; error?: string };
   updateUser: (id: string, u: Partial<User>) => { success: boolean; error?: string };
   deleteUser: (id: string) => { success: boolean; error?: string };
   isUserAssigned: boolean;
@@ -315,6 +317,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Validate that user exists
     return initialUsers.find((u) => u.id === stored.id) || initialUsers[0];
   });
+
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
+    return getStoredItem<boolean>('isLoggedIn', false);
+  });
+
+  const logout = () => {
+    setIsLoggedIn(false);
+    setStoredItem('isLoggedIn', false);
+    setCurrentUser(initialUsers[0]);
+  };
 
   // Whether current user is assigned to an outlet
   const isUserAssigned = useMemo(() => {
@@ -1879,6 +1891,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const target = users.find((u) => u.id === userId);
     if (target) {
       setCurrentUser(target);
+      setIsLoggedIn(true);
+      setStoredItem('isLoggedIn', true);
       if ((target.role === Role.KASIR || target.role === Role.MANAGER || target.role === Role.GUDANG) && target.outletId) {
         setActiveOutletIdState(target.outletId);
         setStoredItem('active_outlet_id', target.outletId);
@@ -1886,7 +1900,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const addUser = (u: { nama: string; username: string; role: Role; outletId: string | null }) => {
+  const addUser = (u: { nama: string; username: string; password: string; role: Role; outletId: string | null }) => {
     if (!u.nama.trim() || !u.username.trim()) {
       return { success: false, error: 'Nama lengkap dan username wajib diisi!' };
     }
@@ -1898,6 +1912,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id: `usr-${Date.now()}`,
       nama: u.nama.trim(),
       username: u.username.trim().toLowerCase(),
+      password: u.password || 'password123',
       role: u.role,
       outletId: u.role === Role.OWNER ? null : u.outletId,
       aktif: true,
@@ -2330,9 +2345,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Value
   const value: AppContextType = {
+    isLoggedIn,
     currentUser,
     setCurrentUser,
     switchUser,
+    logout,
     users,
     addUser,
     updateUser,

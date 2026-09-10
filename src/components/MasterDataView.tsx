@@ -98,6 +98,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
   const [userForm, setUserForm] = useState({
     nama: '',
     username: '',
+    password: '',
     role: Role.KASIR as Role,
     outletId: 'outlet-1' as string | null,
   });
@@ -191,6 +192,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
     const res = addUser({
       nama: userForm.nama,
       username: userForm.username,
+      password: userForm.password || 'password123',
       role: userForm.role,
       outletId: userForm.role === Role.OWNER ? null : userForm.outletId,
     });
@@ -200,7 +202,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
     }
     setIsUserModalOpen(false);
     setUserError('');
-    setUserForm({ nama: '', username: '', role: Role.KASIR, outletId: 'outlet-1' });
+    setUserForm({ nama: '', username: '', password: '', role: Role.KASIR, outletId: 'outlet-1' });
   };
 
   if (!isUserAssigned) {
@@ -1036,6 +1038,13 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
               placeholder="Username"
               value={userForm.username}
               onChange={(e) => setUserForm({ ...userForm, username: e.target.value })}
+              className="w-full min-h-[44px] px-3 rounded-xl border border-stone-300 dark:border-stone-700 text-sm"
+            />
+            <input
+              type="password"
+              placeholder="Password (default: password123)"
+              value={userForm.password}
+              onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
               className="w-full min-h-[44px] px-3 rounded-xl border border-stone-300 dark:border-stone-700 text-sm"
             />
             <SearchableSelect

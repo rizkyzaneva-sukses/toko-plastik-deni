@@ -48,6 +48,7 @@ export const initialUsers: User[] = [
     id: 'user-owner',
     nama: 'Budi Santoso',
     username: 'owner',
+    password: 'owner123',
     role: Role.OWNER,
     outletId: null, // OWNER has global view
     aktif: true,
@@ -56,38 +57,43 @@ export const initialUsers: User[] = [
     id: 'user-manager-1',
     nama: 'Hendra Wijaya',
     username: 'manager1',
+    password: 'manager123',
     role: Role.MANAGER,
-    outletId: 'outlet-1', // Di-assign ke Cabang 1
+    outletId: 'outlet-1',
     aktif: true,
   },
   {
     id: 'user-kasir-1',
     nama: 'Siti Aminah',
     username: 'kasir1',
+    password: 'kasir123',
     role: Role.KASIR,
-    outletId: 'outlet-1', // Di-assign ke Cabang 1
+    outletId: 'outlet-1',
     aktif: true,
   },
   {
     id: 'user-kasir-2',
     nama: 'Rian Pratama',
     username: 'kasir2',
+    password: 'kasir123',
     role: Role.KASIR,
-    outletId: 'outlet-2', // Di-assign ke Cabang 2
+    outletId: 'outlet-2',
     aktif: true,
   },
   {
     id: 'user-kasir-unassigned',
     nama: 'Doni Saputra (Belum Ditugaskan)',
     username: 'doni',
+    password: 'doni123',
     role: Role.KASIR,
-    outletId: null, // Belum di-assign outlet!
+    outletId: null,
     aktif: true,
   },
   {
     id: 'user-gudang-1',
     nama: 'Agus Gudang',
     username: 'gudang1',
+    password: 'gudang123',
     role: Role.GUDANG,
     outletId: 'outlet-1',
     aktif: true,

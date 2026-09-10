@@ -56,6 +56,7 @@ export interface User {
   id: string;
   nama: string;
   username: string;
+  password: string;
   role: Role;
   outletId: string | null; // null for OWNER who can view all outlets
   aktif: boolean;

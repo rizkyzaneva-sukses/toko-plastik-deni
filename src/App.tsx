@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { Layout } from './components/Layout';
+import { LoginPage } from './components/LoginPage';
 import { canAccessTab } from './utils/access';
 import { DashboardView } from './components/DashboardView';
 import { CashierView } from './components/CashierView';
@@ -14,7 +15,7 @@ import { FinancialReportsView } from './components/FinancialReportsView';
 import { MasterDataView } from './components/MasterDataView';
 
 export function AppContent() {
-  const { currentUser } = useApp();
+  const { isLoggedIn, currentUser } = useApp();
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [stockInitialTab, setStockInitialTab] = useState<'daftar' | 'mutasi' | 'opname' | 'ledger' | 'masuk'>('daftar');
   const [stockInitialSupplierId, setStockInitialSupplierId] = useState<string | undefined>(undefined);
@@ -31,6 +32,10 @@ export function AppContent() {
     setStockInitialSupplierId(supplierId);
     setActiveTab('stok');
   };
+
+  if (!isLoggedIn) {
+    return <LoginPage />;
+  }
 
   return (
     <Layout

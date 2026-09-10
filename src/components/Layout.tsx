@@ -26,6 +26,7 @@ import {
   ChevronRight,
   ShieldCheck,
   AlertCircle,
+  LogOut,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Role } from '../types';
@@ -56,6 +57,7 @@ export const Layout: React.FC<LayoutProps> = ({
     currentUser,
     users,
     switchUser,
+    logout,
     isUserAssigned,
     produk,
     getProdukStokForOutlet,
@@ -263,6 +265,15 @@ export const Layout: React.FC<LayoutProps> = ({
               title="Toggle Dark Mode"
             >
               {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
+            </button>
+
+            {/* Logout Button */}
+            <button
+              onClick={logout}
+              className="min-h-[44px] min-w-[44px] p-2 rounded-xl text-stone-500 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-500/10 dark:hover:text-red-400 cursor-pointer flex items-center justify-center shrink-0 transition-colors"
+              title="Keluar (Logout)"
+            >
+              <LogOut className="w-4 h-4" />
             </button>
           </div>
         </div>
