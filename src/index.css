@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+@layer utilities {
+  .font-mono-receipt {
+    font-family: 'JetBrains Mono', 'Courier New', Courier, monospace, ui-monospace;
+  }
+}
+
+@media print {
+  @page {
+    margin: 0;
+    size: 58mm auto;
+  }
+
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Hide everything on the page except the receipt print container */
+  body * {
+    visibility: hidden !important;
+  }
+
+  #thermal-receipt-print-area,
+  #thermal-receipt-print-area * {
+    visibility: visible !important;
+  }
+
+  #thermal-receipt-print-area {
+    display: block !important;
+    position: fixed !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 58mm !important;
+    max-width: 58mm !important;
+    margin: 0 !important;
+    padding: 2mm 1.5mm !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    z-index: 9999999 !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+  }
+
+  #thermal-receipt-print-area pre {
+    display: block !important;
+    font-family: 'Courier New', Courier, monospace !important;
+    font-size: 11px !important;
+    line-height: 1.22 !important;
+    white-space: pre-wrap !important;
+    word-break: break-word !important;
+    letter-spacing: -0.2px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    color: #000000 !important;
+    background: #ffffff !important;
+  }
+}

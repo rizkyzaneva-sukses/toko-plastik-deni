@@ -1,0 +1,6 @@
+{
+  "name": "Kasir & Stok Toko Plastik",
+  "description": "Aplikasi Kasir Mobile-First, Manajemen Stok Pecah Karung, Multi-Outlet, dan Rekap Keuangan Toko Plastik & Bahan Kue",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
