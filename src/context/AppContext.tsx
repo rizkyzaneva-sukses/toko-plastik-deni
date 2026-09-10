@@ -311,7 +311,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Outlets & Users
   const [outlets] = useState<Outlet[]>(() => getStoredItem('outlets', initialOutlets));
-  const [users, setUsers] = useState<User[]>(() => getStoredItem('users', initialUsers));
+  const [users, setUsers] = useState<User[]>(() => {
+    const stored = getStoredItem<User[]>('users', initialUsers);
+    // Merge passwords from initialUsers into stored users (localStorage may have stale data without passwords)
+    return stored.map((u) => {
+      const fresh = initialUsers.find((f) => f.id === u.id);
+      return { ...u, password: u.password || fresh?.password || 'password123' };
+    });
+  });
   const [currentUser, setCurrentUser] = useState<User>(() => {
     const stored = getStoredItem<User>('current_user', initialUsers[0]);
     // Validate that user exists
