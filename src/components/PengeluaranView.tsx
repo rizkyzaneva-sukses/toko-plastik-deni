@@ -16,6 +16,7 @@ import {
   Lock,
   Tag,
   FileSpreadsheet,
+  Pencil,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { MetodeBayar, SumberDana, Role, Pengeluaran } from '../types';
@@ -31,6 +32,7 @@ export const PengeluaranView: React.FC = () => {
     pengeluaranList,
     createPengeluaran,
     deletePengeluaran,
+    updatePengeluaran,
     activeShift,
     isUserAssigned,
   } = useApp();
@@ -75,6 +77,16 @@ export const PengeluaranView: React.FC = () => {
 
   // Delete modal state
   const [deleteTarget, setDeleteTarget] = useState<Pengeluaran | null>(null);
+
+  // Edit modal state
+  const [editTarget, setEditTarget] = useState<Pengeluaran | null>(null);
+  const [editKategoriId, setEditKategoriId] = useState<string>('');
+  const [editNominal, setEditNominal] = useState<number | ''>('');
+  const [editSumberDana, setEditSumberDana] = useState<SumberDana>(SumberDana.LACI_KASIR);
+  const [editMetodeBayar, setEditMetodeBayar] = useState<MetodeBayar>(MetodeBayar.TUNAI);
+  const [editKeterangan, setEditKeterangan] = useState<string>('');
+  const [editTanggal, setEditTanggal] = useState<string>(todayWIBDate());
+  const [editFormError, setEditFormError] = useState<string | null>(null);
 
   // Quick Nominal Chips
   const QUICK_NOMINALS = [10000, 20000, 50000, 100000, 250000, 500000];
@@ -186,6 +198,51 @@ export const PengeluaranView: React.FC = () => {
     if (!deleteTarget) return;
     deletePengeluaran(deleteTarget.id);
     setDeleteTarget(null);
+  };
+
+  // Handle Edit Form Submission
+  const handleEditSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setEditFormError(null);
+
+    if (!editTarget) return;
+
+    const nom = Number(editNominal);
+    if (!nom || nom <= 0) {
+      setEditFormError('Nominal pengeluaran harus lebih dari Rp 0!');
+      return;
+    }
+    if (!editKeterangan.trim()) {
+      setEditFormError('Keterangan / keperluan pengeluaran wajib diisi!');
+      return;
+    }
+
+    const res = updatePengeluaran(editTarget.id, {
+      kategoriId: editKategoriId,
+      nominal: nom,
+      metodeBayar: editMetodeBayar,
+      sumberDana: editSumberDana,
+      keterangan: editKeterangan.trim(),
+      tanggal: editTanggal,
+    });
+
+    if (res.success) {
+      setEditTarget(null);
+    } else {
+      setEditFormError(res.error || 'Gagal mengupdate pengeluaran');
+    }
+  };
+
+  // Open Edit Modal
+  const openEditModal = (item: Pengeluaran) => {
+    setEditFormError(null);
+    setEditKategoriId(item.kategoriId);
+    setEditNominal(item.nominal);
+    setEditSumberDana(item.sumberDana);
+    setEditMetodeBayar(item.metodeBayar);
+    setEditKeterangan(item.keterangan);
+    setEditTanggal(item.tanggal);
+    setEditTarget(item);
   };
 
   return (
@@ -423,6 +480,14 @@ export const PengeluaranView: React.FC = () => {
                       <td className="py-3 px-4 whitespace-nowrap text-center">
                         <button
                           type="button"
+                          onClick={() => openEditModal(item)}
+                          className="p-1 rounded-lg text-stone-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/50 transition-colors cursor-pointer"
+                          title="Edit Pengeluaran"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => setDeleteTarget(item)}
                           className="p-1 rounded-lg text-stone-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors cursor-pointer"
                           title="Hapus Pengeluaran"
@@ -601,6 +666,146 @@ export const PengeluaranView: React.FC = () => {
       )}
 
       {/* CONFIRM DELETE MODAL */}
+      {/* EDIT MODAL */}
+      {editTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white dark:bg-stone-900 rounded-2xl max-w-lg w-full p-5 sm:p-6 border border-stone-200 dark:border-stone-800 shadow-xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-stone-100 dark:border-stone-800">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+                  <Pencil className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-stone-900 dark:text-stone-100">
+                    Edit Pengeluaran
+                  </h3>
+                  <p className="text-xs text-stone-500 dark:text-stone-400">
+                    Perbarui data catatan pengeluaran
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditTarget(null)}
+                className="w-7 h-7 rounded-lg text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 flex items-center justify-center cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {editFormError && (
+              <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 text-xs font-semibold text-rose-700 dark:text-rose-300 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{editFormError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleEditSubmit} className="space-y-3.5 text-xs">
+              {/* Kategori Pengeluaran */}
+              <div>
+                <label className="block font-bold text-stone-700 dark:text-stone-300 mb-1">
+                  Kategori Pengeluaran
+                </label>
+                <SearchableSelect
+                  id="edit-kat-exp"
+                  options={kategoriPengeluaran.map((k) => ({ value: k.id, label: k.nama }))}
+                  value={editKategoriId}
+                  onChange={setEditKategoriId}
+                  placeholder="Pilih kategori"
+                />
+              </div>
+
+              {/* Nominal & Quick Chips */}
+              <div>
+                <label className="block font-bold text-stone-700 dark:text-stone-300 mb-1">
+                  Nominal (Rp)
+                </label>
+                <input
+                  type="number"
+                  placeholder="Contoh: 50000"
+                  value={editNominal}
+                  onChange={(e) => setEditNominal(e.target.value ? Number(e.target.value) : '')}
+                  className="w-full px-3 py-2 rounded-xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100 font-black text-sm focus:outline-hidden focus:ring-2 focus:ring-rose-500"
+                  min="0"
+                  required
+                />
+                {/* Quick Chips */}
+                <div className="flex flex-wrap gap-1.5 mt-1.5">
+                  {QUICK_NOMINALS.map((nomVal) => (
+                    <button
+                      key={nomVal}
+                      type="button"
+                      onClick={() => setEditNominal(nomVal)}
+                      className="px-2 py-0.5 rounded-lg border border-stone-200 dark:border-stone-700 hover:bg-stone-100 dark:hover:bg-stone-800 text-[11px] font-semibold text-stone-600 dark:text-stone-300 cursor-pointer"
+                    >
+                      {formatRupiah(nomVal)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Sumber Dana */}
+              <div>
+                <label className="block font-bold text-stone-700 dark:text-stone-300 mb-1">
+                  Sumber Dana
+                </label>
+                <div className="p-3 rounded-xl border border-rose-200 dark:border-rose-900 bg-rose-50/70 dark:bg-rose-950/30 text-rose-800 dark:text-rose-300">
+                  <div className="font-bold">Laci Kasir</div>
+                  <div className="text-[10px] font-normal opacity-80 mt-0.5">
+                    Semua pengeluaran dipotong dari kas laci toko
+                  </div>
+                </div>
+              </div>
+
+              {/* Keterangan */}
+              <div>
+                <label className="block font-bold text-stone-700 dark:text-stone-300 mb-1">
+                  Keterangan / Keperluan
+                </label>
+                <input
+                  type="text"
+                  placeholder="Contoh: Beli bensin motor kirim barang, bayar listrik token"
+                  value={editKeterangan}
+                  onChange={(e) => setEditKeterangan(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100 focus:outline-hidden focus:ring-2 focus:ring-rose-500"
+                  required
+                />
+              </div>
+
+              {/* Tanggal */}
+              <div>
+                <label className="block font-bold text-stone-700 dark:text-stone-300 mb-1">
+                  Tanggal Pengeluaran
+                </label>
+                <input
+                  type="date"
+                  value={editTanggal}
+                  onChange={(e) => setEditTanggal(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100"
+                  required
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditTarget(null)}
+                  className="px-4 py-2 rounded-xl border border-stone-200 dark:border-stone-700 hover:bg-stone-100 dark:hover:bg-stone-800 font-bold text-stone-600 dark:text-stone-300 cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold cursor-pointer transition-all shadow-xs"
+                >
+                  Simpan Perubahan
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
           <div className="bg-white dark:bg-stone-900 rounded-2xl max-w-sm w-full p-5 border border-stone-200 dark:border-stone-800 shadow-xl space-y-3">

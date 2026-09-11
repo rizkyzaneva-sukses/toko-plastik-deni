@@ -1,4 +1,5 @@
 import express from 'express';
+import helmet from 'helmet';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -7,6 +8,9 @@ const __dirname = dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Security headers via Helmet
+app.use(helmet());
 
 // Serve static files from dist/
 app.use(express.static(join(__dirname, 'dist')));

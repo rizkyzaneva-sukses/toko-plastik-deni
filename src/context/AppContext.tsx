@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import bcrypt from 'bcryptjs';
 import {
   Outlet,
   User,
@@ -175,6 +176,15 @@ interface AppContextType {
     tanggal?: string;
   }) => { success: boolean; error?: string };
   deletePengeluaran: (id: string) => { success: boolean; error?: string };
+  updatePengeluaran: (id: string, data: {
+    outletId?: string;
+    kategoriId?: string;
+    nominal?: number;
+    metodeBayar?: MetodeBayar;
+    sumberDana?: SumberDana;
+    keterangan?: string;
+    tanggal?: string;
+  }) => { success: boolean; error?: string };
 
   // Stock Opname & Movement Ledger
   stokMovementList: StokMovement[];
@@ -226,7 +236,10 @@ interface AppContextType {
   updateProduk: (id: string, p: any) => { success: boolean; error?: string };
   addPelanggan: (p: Partial<Pelanggan>) => void;
   updatePelanggan: (id: string, p: Partial<Pelanggan>) => void;
+  deletePelanggan: (id: string) => void;
   addSupplier: (s: Partial<Supplier>) => void;
+  updateSupplier: (id: string, s: Partial<Supplier>) => void;
+  deleteSupplier: (id: string) => void;
   mutasiList: MutasiStok[];
   createMutasiStok: (data: {
     outletAsalId: string;
@@ -314,9 +327,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [users, setUsers] = useState<User[]>(() => {
     const stored = getStoredItem<User[]>('users', initialUsers);
     // Merge passwords from initialUsers into stored users (localStorage may have stale data without passwords)
-    return stored.map((u) => {
+    return stored.map((u: User) => {
       const fresh = initialUsers.find((f) => f.id === u.id);
-      return { ...u, password: u.password || fresh?.password || 'password123' };
+      const pwd = u.password || fresh?.password || 'password123';
+      // Migrate plaintext passwords to bcrypt hashes on first load
+      if (!pwd.startsWith('$2')) {
+        return { ...u, password: bcrypt.hashSync(pwd, 10) };
+      }
+      return { ...u, password: pwd };
     });
   });
   const [currentUser, setCurrentUser] = useState<User>(() => {
@@ -332,8 +350,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const logout = () => {
     setIsLoggedIn(false);
     setStoredItem('isLoggedIn', false);
+    setStoredItem('sessionExpiry', 0);
     setCurrentUser(initialUsers[0]);
   };
+
+  // Session expiry check: auto-logout if session has expired
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    const checkSession = () => {
+      const expiry = getStoredItem<number>('sessionExpiry', 0);
+      if (expiry > 0 && Date.now() > expiry) {
+        // Session expired — auto-logout
+        setIsLoggedIn(false);
+        setStoredItem('isLoggedIn', false);
+        setStoredItem('sessionExpiry', 0);
+        setCurrentUser(initialUsers[0]);
+      }
+    };
+    // Check immediately on mount
+    checkSession();
+    // Check every 60 seconds
+    const interval = setInterval(checkSession, 60 * 1000);
+    return () => clearInterval(interval);
+  }, [isLoggedIn]);
 
   // Whether current user is assigned to an outlet
   const isUserAssigned = useMemo(() => {
@@ -431,6 +470,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => setStoredItem('produk', produk), [produk]);
   useEffect(() => setStoredItem('stok_outlet', stokOutlet), [stokOutlet]);
   useEffect(() => setStoredItem('pelanggan', pelanggan), [pelanggan]);
+  useEffect(() => setStoredItem('suppliers', suppliers), [suppliers]);
   useEffect(() => setStoredItem('transaksi', transaksiList), [transaksiList]);
   useEffect(() => setStoredItem('pembayaran_piutang', pembayaranPiutang), [pembayaranPiutang]);
   useEffect(() => setStoredItem('pembelian', pembelianList), [pembelianList]);
@@ -1407,6 +1447,60 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: true };
   };
 
+  const updatePengeluaran = (id: string, data: {
+    outletId?: string;
+    kategoriId?: string;
+    nominal?: number;
+    metodeBayar?: MetodeBayar;
+    sumberDana?: SumberDana;
+    keterangan?: string;
+    tanggal?: string;
+  }) => {
+    const target = pengeluaranList.find((p) => p.id === id);
+    if (!target) return { success: false, error: 'Pengeluaran tidak ditemukan' };
+
+    const oldNominal = target.nominal;
+    const newNominal = data.nominal !== undefined ? data.nominal : oldNominal;
+    const nominalDiff = newNominal - oldNominal;
+
+    // Adjust kas balance if nominal changed
+    if (nominalDiff !== 0) {
+      if (activeShift && activeShift.outletId === target.outletId) {
+        setActiveShift((prev) =>
+          prev && prev.outletId === target.outletId
+            ? {
+                ...prev,
+                tunaiSistem: prev.tunaiSistem - nominalDiff,
+                pengeluaranLaci: Math.max(0, prev.pengeluaranLaci - nominalDiff),
+              }
+            : prev
+        );
+      } else {
+        applyKasDelta(target.outletId, -nominalDiff);
+      }
+    }
+
+    // Resolve new kategori name if kategoriId changed
+    let kategoriNama = target.kategoriNama;
+    if (data.kategoriId && data.kategoriId !== target.kategoriId) {
+      const kat = kategoriPengeluaran.find((k) => k.id === data.kategoriId);
+      kategoriNama = kat?.nama || target.kategoriNama;
+    }
+
+    setPengeluaranList((prev) =>
+      prev.map((p) =>
+        p.id === id
+          ? {
+              ...p,
+              ...data,
+              kategoriNama,
+            }
+          : p
+      )
+    );
+    return { success: true };
+  };
+
   // Stock Opname
   const submitStockOpname = (outletId: string, produkId: string, fisikCount: number, alasan: string) => {
     const prod = produk.find((p) => p.id === produkId);
@@ -1881,6 +1975,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updatePelanggan = (id: string, p: Partial<Pelanggan>) => {
     setPelanggan((prev) => prev.map((item) => (item.id === id ? { ...item, ...p } : item)));
   };
+  const deletePelanggan = (id: string) => {
+    setPelanggan((prev) => prev.filter((item) => item.id !== id));
+  };
   const addSupplier = (s: Partial<Supplier>) => {
     const newS: Supplier = {
       id: `supp-${Date.now()}`,
@@ -1893,6 +1990,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setSuppliers((prev) => [newS, ...prev]);
   };
+  const updateSupplier = (id: string, s: Partial<Supplier>) => {
+    setSuppliers((prev) => prev.map((item) => (item.id === id ? { ...item, ...s } : item)));
+  };
+  const deleteSupplier = (id: string) => {
+    setSuppliers((prev) => prev.filter((item) => item.id !== id));
+  };
 
   // User Management & Switcher
   const switchUser = (userId: string) => {
@@ -1901,6 +2004,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setCurrentUser(target);
       setIsLoggedIn(true);
       setStoredItem('isLoggedIn', true);
+      // Set session expiry to 8 hours from now
+      setStoredItem('sessionExpiry', Date.now() + 8 * 60 * 60 * 1000);
       if ((target.role === Role.KASIR || target.role === Role.MANAGER || target.role === Role.GUDANG) && target.outletId) {
         setActiveOutletIdState(target.outletId);
         setStoredItem('active_outlet_id', target.outletId);
@@ -1916,11 +2021,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (existing) {
       return { success: false, error: 'Username sudah digunakan!' };
     }
+    // Hash the password before storing
+    const hashedPassword = bcrypt.hashSync(u.password || 'password123', 10);
     const newUser: User = {
       id: `usr-${Date.now()}`,
       nama: u.nama.trim(),
       username: u.username.trim().toLowerCase(),
-      password: u.password || 'password123',
+      password: hashedPassword,
       role: u.role,
       outletId: u.role === Role.OWNER ? null : u.outletId,
       aktif: true,
@@ -2420,11 +2527,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCurrentUserRole,
     shifts,
     addPengeluaran,
+    updatePengeluaran,
     addProduk,
     updateProduk,
     addPelanggan,
     updatePelanggan,
+    deletePelanggan,
     addSupplier,
+    updateSupplier,
+    deleteSupplier,
     mutasiList,
     createMutasiStok,
     processStockOpname,

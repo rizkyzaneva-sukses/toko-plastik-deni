@@ -358,18 +358,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
         <div className="bg-white dark:bg-stone-900 rounded-2xl p-4 sm:p-5 border border-stone-200 dark:border-stone-800 shadow-xs relative overflow-hidden">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-bold text-stone-500 dark:text-stone-400">
-              {currentUser.role === Role.KASIR ? 'Transaksi Kasir' : 'Laba Kotor Hari Ini'}
+              {(currentUser.role === Role.OWNER || currentUser.role === Role.MANAGER) ? 'Laba Kotor Hari Ini' : currentUser.role === Role.KASIR ? 'Transaksi Kasir' : 'Status Hari Ini'}
             </span>
             <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
               <DollarSign className="w-4 h-4" />
             </div>
           </div>
           <div className="text-xl sm:text-2xl font-black text-stone-900 dark:text-stone-100">
-            {currentUser.role === Role.KASIR ? `${todayMetrics.count} Nota` : formatRupiah(todayMetrics.labaKotor)}
+            {(currentUser.role === Role.OWNER || currentUser.role === Role.MANAGER) ? formatRupiah(todayMetrics.labaKotor) : currentUser.role === Role.KASIR ? `${todayMetrics.count} Nota` : `${todayMetrics.count} Aktivitas`}
           </div>
           <div className="flex items-center justify-between text-xs text-stone-500 dark:text-stone-400 mt-2 pt-2 border-t border-stone-100 dark:border-stone-800">
             {currentUser.role === Role.KASIR ? (
               <span>Kasir Aktif: {currentUser.nama}</span>
+            ) : currentUser.role === Role.GUDANG ? (
+              <span>Petugas Gudang: {currentUser.nama}</span>
             ) : (
               <>
                 <span>Est. Margin Kotor</span>

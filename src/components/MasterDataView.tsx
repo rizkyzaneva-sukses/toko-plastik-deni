@@ -36,7 +36,10 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
     updateProduk,
     addPelanggan,
     updatePelanggan,
+    deletePelanggan,
     addSupplier,
+    updateSupplier,
+    deleteSupplier,
     activeOutlet,
     isUserAssigned,
     users,
@@ -74,6 +77,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
 
   // Pelanggan Modal State
   const [isCustModalOpen, setIsCustModalOpen] = useState(false);
+  const [editingPelangganId, setEditingPelangganId] = useState<string | null>(null);
   const [custForm, setCustForm] = useState<Partial<Pelanggan>>({
     nama: '',
     telepon: '',
@@ -85,6 +89,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
 
   // Supplier Modal State
   const [isSuppModalOpen, setIsSuppModalOpen] = useState(false);
+  const [editingSupplierId, setEditingSupplierId] = useState<string | null>(null);
   const [suppForm, setSuppForm] = useState<Partial<Supplier>>({
     nama: '',
     telepon: '',
@@ -95,6 +100,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
   });
 
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [userForm, setUserForm] = useState({
     nama: '',
     username: '',
@@ -175,34 +181,116 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
   const handleSavePelanggan = (e: React.FormEvent) => {
     e.preventDefault();
     if (!custForm.nama) return;
-    addPelanggan(custForm as any);
+    if (editingPelangganId) {
+      updatePelanggan(editingPelangganId, custForm);
+    } else {
+      addPelanggan(custForm as any);
+    }
     setIsCustModalOpen(false);
+    setEditingPelangganId(null);
+  };
+
+  // Open Pelanggan Modal for Create / Edit
+  const handleOpenCustModal = (item?: Pelanggan) => {
+    if (item) {
+      setEditingPelangganId(item.id);
+      setCustForm({ ...item });
+    } else {
+      setEditingPelangganId(null);
+      setCustForm({
+        nama: '',
+        telepon: '',
+        alamat: '',
+        limitKredit: 5000000,
+        defaultTempoHari: 14,
+        aktif: true,
+      });
+    }
+    setIsCustModalOpen(true);
   };
 
   // Handle Save Supplier
   const handleSaveSupplier = (e: React.FormEvent) => {
     e.preventDefault();
     if (!suppForm.nama) return;
-    addSupplier(suppForm as any);
+    if (editingSupplierId) {
+      updateSupplier(editingSupplierId, suppForm);
+    } else {
+      addSupplier(suppForm as any);
+    }
     setIsSuppModalOpen(false);
+    setEditingSupplierId(null);
+  };
+
+  // Open Supplier Modal for Create / Edit
+  const handleOpenSuppModal = (item?: Supplier) => {
+    if (item) {
+      setEditingSupplierId(item.id);
+      setSuppForm({ ...item });
+    } else {
+      setEditingSupplierId(null);
+      setSuppForm({
+        nama: '',
+        telepon: '',
+        alamat: '',
+        kontakPerson: '',
+        rekeningBank: '',
+        aktif: true,
+      });
+    }
+    setIsSuppModalOpen(true);
   };
 
   const handleSaveUser = (e: React.FormEvent) => {
     e.preventDefault();
-    const res = addUser({
-      nama: userForm.nama,
-      username: userForm.username,
-      password: userForm.password || 'password123',
-      role: userForm.role,
-      outletId: userForm.role === Role.OWNER ? null : userForm.outletId,
-    });
-    if (!res.success) {
-      setUserError(res.error || 'Gagal menambah pengguna');
-      return;
+    if (editingUserId) {
+      const res = updateUser(editingUserId, {
+        nama: userForm.nama,
+        username: userForm.username,
+        role: userForm.role,
+        outletId: userForm.role === Role.OWNER ? null : userForm.outletId,
+        ...(userForm.password ? { password: userForm.password } : {}),
+      });
+      if (!res.success) {
+        setUserError(res.error || 'Gagal mengupdate pengguna');
+        return;
+      }
+    } else {
+      const res = addUser({
+        nama: userForm.nama,
+        username: userForm.username,
+        password: userForm.password || 'password123',
+        role: userForm.role,
+        outletId: userForm.role === Role.OWNER ? null : userForm.outletId,
+      });
+      if (!res.success) {
+        setUserError(res.error || 'Gagal menambah pengguna');
+        return;
+      }
     }
     setIsUserModalOpen(false);
+    setEditingUserId(null);
     setUserError('');
     setUserForm({ nama: '', username: '', password: '', role: Role.KASIR, outletId: 'outlet-1' });
+  };
+
+  // Open User Modal for Create / Edit
+  const handleOpenUserModal = (item?: any) => {
+    if (item) {
+      setEditingUserId(item.id);
+      setUserForm({
+        nama: item.nama,
+        username: item.username,
+        password: '',
+        role: item.role,
+        outletId: item.outletId || 'outlet-1',
+      });
+    } else {
+      setEditingUserId(null);
+      setUserForm({ nama: '', username: '', password: '', role: Role.KASIR, outletId: 'outlet-1' });
+    }
+    setUserError('');
+    setIsUserModalOpen(true);
   };
 
   if (!isUserAssigned) {
@@ -246,7 +334,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
 
           {activeTab === 'pelanggan' && (
             <button
-              onClick={() => setIsCustModalOpen(true)}
+              onClick={() => handleOpenCustModal()}
               className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs flex items-center gap-1.5 shadow-2xs cursor-pointer"
             >
               <Plus className="w-4 h-4" />
@@ -256,7 +344,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
 
           {activeTab === 'supplier' && (
             <button
-              onClick={() => setIsSuppModalOpen(true)}
+              onClick={() => handleOpenSuppModal()}
               className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs flex items-center gap-1.5 shadow-2xs cursor-pointer"
             >
               <Plus className="w-4 h-4" />
@@ -266,10 +354,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
 
           {activeTab === 'pengguna' && currentUser.role === Role.OWNER && (
             <button
-              onClick={() => {
-                setUserError('');
-                setIsUserModalOpen(true);
-              }}
+              onClick={() => handleOpenUserModal()}
               className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs flex items-center gap-1.5 shadow-2xs cursor-pointer"
             >
               <Plus className="w-4 h-4" />
@@ -407,6 +492,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
                   <th className="py-3 px-3.5 font-bold text-right">Limit Kredit</th>
                   <th className="py-3 px-3.5 font-bold text-center">Tempo Bayar</th>
                   <th className="py-3 px-3.5 font-bold">Status</th>
+                  <th className="py-3 px-3.5 font-bold text-right">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100 dark:divide-stone-800">
@@ -420,9 +506,31 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
                     </td>
                     <td className="py-3 px-3.5 text-center font-bold">{c.defaultTempoHari} Hari</td>
                     <td className="py-3 px-3.5">
-                      <span className="text-[10px] px-2 py-0.5 rounded font-bold bg-emerald-100 text-emerald-700">
-                        AKTIF
+                      <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${c.aktif ? 'bg-emerald-100 text-emerald-700' : 'bg-stone-100 text-stone-500'}`}>
+                        {c.aktif ? 'AKTIF' : 'NONAKTIF'}
                       </span>
+                    </td>
+                    <td className="py-3 px-3.5 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => handleOpenCustModal(c)}
+                          className="p-1 rounded text-stone-400 hover:text-amber-600 hover:bg-stone-100"
+                          title="Edit Pelanggan"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (window.confirm(`Hapus pelanggan "${c.nama}"?`)) {
+                              deletePelanggan(c.id);
+                            }
+                          }}
+                          className="p-1 rounded text-stone-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                          title="Hapus Pelanggan"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -456,19 +564,37 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
                     <td className="py-3 px-3.5 text-stone-500">{s.alamat}</td>
                     <td className="py-3 px-3.5 font-mono text-stone-600">{s.rekeningBank || '-'}</td>
                     <td className="py-3 px-3.5 text-right">
-                      {onOrderFromSupplier ? (
+                      <div className="flex items-center justify-end gap-1">
                         <button
-                          type="button"
-                          onClick={() => onOrderFromSupplier(s.id)}
-                          className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-[11px] inline-flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer"
-                          title={`Beli produk dari ${s.nama}`}
+                          onClick={() => handleOpenSuppModal(s)}
+                          className="p-1 rounded text-stone-400 hover:text-amber-600 hover:bg-stone-100"
+                          title="Edit Supplier"
                         >
-                          <Truck className="w-3.5 h-3.5" />
-                          <span>Beli ke Supplier</span>
+                          <Edit2 className="w-3.5 h-3.5" />
                         </button>
-                      ) : (
-                        <span className="text-stone-400 text-[11px]">-</span>
-                      )}
+                        <button
+                          onClick={() => {
+                            if (window.confirm(`Hapus supplier "${s.nama}"?`)) {
+                              deleteSupplier(s.id);
+                            }
+                          }}
+                          className="p-1 rounded text-stone-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                          title="Hapus Supplier"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                        {onOrderFromSupplier && (
+                          <button
+                            type="button"
+                            onClick={() => onOrderFromSupplier(s.id)}
+                            className="px-2.5 py-1 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-[11px] inline-flex items-center gap-1 shadow-2xs transition-all cursor-pointer"
+                            title={`Beli produk dari ${s.nama}`}
+                          >
+                            <Truck className="w-3.5 h-3.5" />
+                            <span>Beli</span>
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -503,20 +629,35 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
                         {u.role === Role.OWNER ? 'Global' : assigned?.nama || 'Belum ditugaskan'}
                       </td>
                       <td className="py-3 px-3.5 text-right">
-                        {currentUser.role === Role.OWNER && u.id !== currentUser.id ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const res = deleteUser(u.id);
-                              if (!res.success) alert(res.error);
-                            }}
-                            className="px-3 py-1.5 rounded-xl text-rose-600 font-bold hover:bg-rose-50 dark:hover:bg-rose-950/30"
-                          >
-                            Hapus
-                          </button>
-                        ) : (
-                          <span className="text-stone-400">Aktif</span>
-                        )}
+                        <div className="flex items-center justify-end gap-1">
+                          {currentUser.role === Role.OWNER && u.id !== currentUser.id ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenUserModal(u)}
+                                className="p-1 rounded text-stone-400 hover:text-amber-600 hover:bg-stone-100"
+                                title="Edit Pengguna"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (window.confirm(`Hapus pengguna "${u.nama}"?`)) {
+                                    const res = deleteUser(u.id);
+                                    if (!res.success) alert(res.error);
+                                  }
+                                }}
+                                className="p-1 rounded text-stone-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                                title="Hapus Pengguna"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          ) : (
+                            <span className="text-stone-400">Aktif</span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -550,20 +691,35 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
                       <td className="py-3 px-3.5">{u.role}</td>
                       <td className="py-3 px-3.5">{u.role === Role.OWNER ? 'Global' : assigned?.nama || 'Belum ditugaskan'}</td>
                       <td className="py-3 px-3.5 text-right">
-                        {currentUser.role === Role.OWNER && u.id !== currentUser.id ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const res = deleteUser(u.id);
-                              if (!res.success) alert(res.error);
-                            }}
-                            className="px-3 py-1.5 rounded-xl text-rose-600 font-bold hover:bg-rose-50 dark:hover:bg-rose-950/30"
-                          >
-                            Hapus
-                          </button>
-                        ) : (
-                          <span className="text-stone-400">Aktif</span>
-                        )}
+                        <div className="flex items-center justify-end gap-1">
+                          {currentUser.role === Role.OWNER && u.id !== currentUser.id ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenUserModal(u)}
+                                className="p-1 rounded text-stone-400 hover:text-amber-600 hover:bg-stone-100"
+                                title="Edit Pengguna"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (window.confirm(`Hapus pengguna "${u.nama}"?`)) {
+                                    const res = deleteUser(u.id);
+                                    if (!res.success) alert(res.error);
+                                  }
+                                }}
+                                className="p-1 rounded text-stone-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                                title="Hapus Pengguna"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          ) : (
+                            <span className="text-stone-400">Aktif</span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -816,7 +972,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
           <div className="relative w-full max-w-md bg-white dark:bg-stone-900 rounded-2xl shadow-2xl border border-stone-200 dark:border-stone-800 p-5 space-y-4">
             <h3 className="font-bold text-sm text-stone-900 dark:text-stone-100">
-              Tambah Pelanggan Baru (B2B / Grosir)
+              {editingPelangganId ? 'Edit Pelanggan' : 'Tambah Pelanggan Baru (B2B / Grosir)'}
             </h3>
 
             <form onSubmit={handleSavePelanggan} className="space-y-3">
@@ -917,7 +1073,9 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
       {isSuppModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
           <div className="relative w-full max-w-md bg-white dark:bg-stone-900 rounded-2xl shadow-2xl border border-stone-200 dark:border-stone-800 p-5 space-y-4">
-            <h3 className="font-bold text-sm text-stone-900 dark:text-stone-100">Tambah Data Supplier</h3>
+            <h3 className="font-bold text-sm text-stone-900 dark:text-stone-100">
+              {editingSupplierId ? 'Edit Supplier' : 'Tambah Data Supplier'}
+            </h3>
 
             <form onSubmit={handleSaveSupplier} className="space-y-3">
               <div>
@@ -1024,7 +1182,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
             onSubmit={handleSaveUser}
             className="w-full max-w-md bg-white dark:bg-stone-900 rounded-2xl p-5 space-y-3 border border-stone-200 dark:border-stone-800"
           >
-            <h3 className="font-black text-sm">Tambah Pengguna</h3>
+            <h3 className="font-black text-sm">{editingUserId ? 'Edit Pengguna' : 'Tambah Pengguna'}</h3>
             {userError && <p className="text-xs text-rose-600 font-semibold">{userError}</p>}
             <input
               required
@@ -1042,7 +1200,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
             />
             <input
               type="password"
-              placeholder="Password (default: password123)"
+              placeholder={editingUserId ? "Password baru (kosongkan jika tidak diubah)" : "Password (default: password123)"}
               value={userForm.password}
               onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
               className="w-full min-h-[44px] px-3 rounded-xl border border-stone-300 dark:border-stone-700 text-sm"

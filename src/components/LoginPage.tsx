@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import bcrypt from 'bcryptjs';
 import { useApp } from '../context/AppContext';
 import { Lock, User, Eye, EyeOff, Store } from 'lucide-react';
 
@@ -18,7 +19,7 @@ export function LoginPage() {
     // Simulate small delay
     setTimeout(() => {
       const user = users.find(
-        (u) => u.username.toLowerCase() === username.trim().toLowerCase() && u.password === password
+        (u) => u.username.toLowerCase() === username.trim().toLowerCase() && bcrypt.compareSync(password, u.password)
       );
 
       if (!user) {
