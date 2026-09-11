@@ -119,13 +119,6 @@ export function LoginPage() {
             </button>
           </form>
         </div>
-
-        {/* Demo credentials hint */}
-        <div className="mt-6 text-center">
-          <p className="text-stone-500 text-xs">
-            Demo: owner / owner123
-          </p>
-        </div>
       </div>
     </div>
   );

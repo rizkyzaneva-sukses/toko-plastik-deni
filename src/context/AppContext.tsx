@@ -1827,8 +1827,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     window.location.reload();
   };
 
-  // Role switcher helper
+  // Role switcher helper — OWNER only, prevents privilege escalation
   const setCurrentUserRole = (role: Role) => {
+    if (currentUser.role !== Role.OWNER) return;
     setCurrentUser((prev) => ({
       ...prev,
       role,

@@ -55,8 +55,6 @@ export const Layout: React.FC<LayoutProps> = ({
     setActiveOutletId,
     activeShift,
     currentUser,
-    users,
-    switchUser,
     logout,
     isUserAssigned,
     produk,
@@ -234,28 +232,13 @@ export const Layout: React.FC<LayoutProps> = ({
               <span>{activeShift ? `Shift: ${formatRupiah(activeShift.tunaiSistem)}` : 'Buka Shift'}</span>
             </button>
 
-            {/* User Account / Role Switcher */}
-            <div className="min-w-[140px] max-w-[200px] sm:max-w-[240px]">
-              <SearchableSelect
-                id="header-user"
-                options={users.map((u) => {
-                  const assignedOutlet = outlets.find((o) => o.id === u.outletId);
-                  const outletLabel =
-                    u.role === Role.OWNER
-                      ? 'Global'
-                      : assignedOutlet
-                      ? assignedOutlet.nama.replace('Toko Plastik ', '')
-                      : 'Unassigned';
-                  return {
-                    value: u.id,
-                    label: `${u.nama.split(' ')[0]} (${u.role})`,
-                    subtitle: outletLabel,
-                  };
-                })}
-                value={currentUser.id}
-                onChange={switchUser}
-                placeholder="Pilih akun"
-              />
+            {/* User Account — Display Only (logout to switch) */}
+            <div
+              className="min-w-[120px] max-w-[200px] sm:max-w-[240px] px-2.5 py-1.5 rounded-xl border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-800 text-xs font-bold text-stone-700 dark:text-stone-300 flex items-center gap-1.5 shadow-2xs cursor-default truncate"
+              title="Logout untuk ganti akun"
+            >
+              <User className="w-3.5 h-3.5 text-stone-400 shrink-0" />
+              <span className="truncate">{currentUser.nama.split(' ')[0]} ({currentUser.role})</span>
             </div>
 
             {/* Dark Mode Toggle */}

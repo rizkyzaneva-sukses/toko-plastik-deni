@@ -99,7 +99,7 @@ export const ModalUsahaView: React.FC = () => {
       if (tx.tipe === TipeTransaksiModal.TAMBAH_MODAL) {
         if (tx.sumberModal === SumberModal.UANG_SENDIRI) sendiri += tx.nominal;
         else if (tx.sumberModal === SumberModal.INVESTOR) investor += tx.nominal;
-        else if (tx.sumberModal === SumberModal.UTANG_MODAL) utang += tx.nominal;
+        else if (tx.sumberModal === SumberModal.UTANG) utang += tx.nominal;
       }
     }
     return { sendiri, investor, utang };
@@ -483,7 +483,7 @@ export const ModalUsahaView: React.FC = () => {
                     <td className="py-3 px-4 whitespace-nowrap font-medium text-stone-700 dark:text-stone-300">
                       {tx.sumberModal === SumberModal.INVESTOR
                         ? 'Investor'
-                        : tx.sumberModal === SumberModal.UTANG_MODAL
+                        : tx.sumberModal === SumberModal.UTANG
                         ? 'Utang Usaha'
                         : tx.sumberModal === SumberModal.UANG_SENDIRI
                         ? 'Uang Sendiri'
@@ -693,9 +693,9 @@ export const ModalUsahaView: React.FC = () => {
 
                   <button
                     type="button"
-                    onClick={() => setSumberModal(SumberModal.UTANG_MODAL)}
+                    onClick={() => setSumberModal(SumberModal.UTANG)}
                     className={`p-2 rounded-xl border text-center font-bold cursor-pointer transition-all ${
-                      sumberModal === SumberModal.UTANG_MODAL
+                      sumberModal === SumberModal.UTANG
                         ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300'
                         : 'border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-400'
                     }`}

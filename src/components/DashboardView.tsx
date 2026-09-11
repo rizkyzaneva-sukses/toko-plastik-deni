@@ -297,24 +297,28 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
           </p>
         </div>
 
-        {/* Quick Action Buttons */}
+        {/* Quick Action Buttons — gated by role */}
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => onNavigate('kasir')}
-            className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
-          >
-            <ShoppingCart className="w-4 h-4" />
-            <span>Buka Kasir POS</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => onNavigate('pengeluaran')}
-            className="px-3.5 py-2 rounded-xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 hover:bg-stone-50 dark:hover:bg-stone-700 text-stone-700 dark:text-stone-300 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
-          >
-            <Receipt className="w-4 h-4 text-rose-500" />
-            <span>Catat Pengeluaran</span>
-          </button>
+          {currentUser.role !== Role.GUDANG && (
+            <button
+              type="button"
+              onClick={() => onNavigate('kasir')}
+              className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+            >
+              <ShoppingCart className="w-4 h-4" />
+              <span>Buka Kasir POS</span>
+            </button>
+          )}
+          {currentUser.role !== Role.GUDANG && (
+            <button
+              type="button"
+              onClick={() => onNavigate('pengeluaran')}
+              className="px-3.5 py-2 rounded-xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 hover:bg-stone-50 dark:hover:bg-stone-700 text-stone-700 dark:text-stone-300 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
+            >
+              <Receipt className="w-4 h-4 text-rose-500" />
+              <span>Catat Pengeluaran</span>
+            </button>
+          )}
           {currentUser.role === Role.OWNER && (
             <button
               type="button"
@@ -419,7 +423,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
         </div>
       </div>
 
-      {/* SECTION: MODAL USAHA & EKUITAS SUMMARY (FOR OWNER & MANAGERS) */}
+      {/* SECTION: MODAL USAHA & EKUITAS SUMMARY (OWNER ONLY) */}
+      {currentUser.role === Role.OWNER && (
       <div className="bg-gradient-to-r from-stone-900 to-stone-800 text-white rounded-2xl p-5 sm:p-6 shadow-sm border border-stone-700">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-stone-700/80">
           <div>
@@ -475,10 +480,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
           </div>
         </div>
       </div>
+      )}
 
       {/* SECTION: ACTIONABLE ALERTS & WATCHLIST */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Alert 1: Low Stock Alert */}
+      <div className={`grid grid-cols-1 ${currentUser.role === Role.OWNER || currentUser.role === Role.MANAGER ? 'md:grid-cols-3' : 'md:grid-cols-1'} gap-4`}>
+        {/* Alert 1: Low Stock Alert — OWNER/MANAGER/GUDANG only */}
+        {(currentUser.role === Role.OWNER || currentUser.role === Role.MANAGER || currentUser.role === Role.GUDANG) && (
         <div className="bg-white dark:bg-stone-900 rounded-2xl p-4 sm:p-5 border border-stone-200 dark:border-stone-800 shadow-xs flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-3">
@@ -535,8 +542,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
             <ChevronRight className="w-3.5 h-3.5" />
           </button>
         </div>
+        )}
 
-        {/* Alert 2: Piutang Pelanggan Overdue */}
+        {/* Alert 2: Piutang Pelanggan Overdue — OWNER/MANAGER/KASIR only */}
+        {(currentUser.role === Role.OWNER || currentUser.role === Role.MANAGER || currentUser.role === Role.KASIR) && (
         <div className="bg-white dark:bg-stone-900 rounded-2xl p-4 sm:p-5 border border-stone-200 dark:border-stone-800 shadow-xs flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-3">
@@ -568,7 +577,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
                     <div className="min-w-0 pr-2">
                       <div className="font-bold text-stone-800 dark:text-stone-200 truncate">{item.namaPelanggan}</div>
                       <div className="text-[11px] text-stone-500 dark:text-stone-400 flex items-center gap-1.5">
-                        <span>Nota: {item.nomorNota}</span>
+                        <span>Nota: {item.nomor}</span>
                         {item.isOverdue && (
                           <span className="text-[9.5px] px-1 py-0.2 rounded font-black bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300">
                             Jatuh Tempo!
@@ -595,8 +604,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
             <ChevronRight className="w-3.5 h-3.5" />
           </button>
         </div>
+        )}
 
-        {/* Alert 3: Pecah Karung & Produksi Cepat */}
+        {/* Alert 3: Pecah Karung & Produksi Cepat — OWNER/MANAGER/GUDANG only */}
+        {(currentUser.role === Role.OWNER || currentUser.role === Role.MANAGER || currentUser.role === Role.GUDANG) && (
         <div className="bg-white dark:bg-stone-900 rounded-2xl p-4 sm:p-5 border border-stone-200 dark:border-stone-800 shadow-xs flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-3">
@@ -635,9 +646,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
             <ChevronRight className="w-3.5 h-3.5" />
           </button>
         </div>
+        )}
       </div>
 
-      {/* CHARTS ROW: Tren Penjualan 7 Hari & Komposisi Pembayaran */}
+      {/* CHARTS ROW: Tren Penjualan 7 Hari & Komposisi Pembayaran — OWNER/MANAGER only */}
+      {(currentUser.role === Role.OWNER || currentUser.role === Role.MANAGER) && (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Trend Area Chart (2 Cols) */}
         <div className="lg:col-span-2 bg-white dark:bg-stone-900 rounded-2xl p-4 sm:p-5 border border-stone-200 dark:border-stone-800 shadow-xs">
@@ -766,6 +779,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
           </div>
         </div>
       </div>
+      )}
 
       {/* BOTTOM ROW: TOP SELLING PRODUCTS & RECENT TRANSACTIONS */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -831,7 +845,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
                 >
                   <div className="min-w-0 pr-2">
                     <div className="flex items-center gap-2">
-                      <span className="font-bold text-stone-800 dark:text-stone-200">{tx.nomorNota}</span>
+                      <span className="font-bold text-stone-800 dark:text-stone-200">{tx.nomor}</span>
                       <span className="text-[10px] px-1.5 py-0.2 rounded font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300">
                         {tx.metodeBayar}
                       </span>
